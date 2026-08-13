@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- =========================================================
+         FORM VIEW  (extends the base stock.picking form)
+         Tracking fields placed next to the carrier fields created
+         by the delivery module (group name="carrier_data").
+         Only visible for outgoing pickings (Delivery Orders).
+         ========================================================= -->
+    <record id="view_picking_form_delivery_tracking" model="ir.ui.view">
+        <field name="name">stock.picking.form.delivery.tracking</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="arch" type="xml">
+            <!-- Tracking fields next to the carrier block -->
+            <xpath expr="//group[@name='carrier_data']" position="inside">
+                <label for="delivery_tracking_status"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_status', '=', 'draft')]}"/>
+                <div attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_status', '=', 'draft')]}">
+                    <field name="delivery_tracking_status" widget="badge" class="oe_inline"/>
+                </div>
+                <label for="delivery_tracking_status_desc"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_status_desc', '=', False)]}"/>
+                <field name="delivery_tracking_status_desc" readonly="1"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_status_desc', '=', False)]}"/>
+                <label for="delivery_last_check"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_last_check', '=', False)]}"/>
+                <field name="delivery_last_check" readonly="1"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_last_check', '=', False)]}"/>
+                <label for="delivery_tracking_error"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_error', '=', False)]}"/>
+                <field name="delivery_tracking_error" readonly="1"
+                       class="text-danger"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_error', '=', False)]}"/>
+            </xpath>
+
+            <!-- "Cek Status Pengiriman" button in the header -->
+            <xpath expr="/form/header/button[last()]" position="after">
+                <button name="action_check_delivery_status" type="object"
+                        string="Cek Status Pengiriman" class="oe_highlight"
+                        groups="stock.group_stock_user"
+                        attrs="{'invisible': ['|', '|', ('picking_type_code', '!=', 'outgoing'), ('state', '!=', 'done'), ('carrier_tracking_ref', '=', False)]}"/>
+            </xpath>
+
+            <!-- New tab "Riwayat Tracking" -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Riwayat Tracking" name="delivery_tracking_history"
+                      attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}">
+                    <field name="tracking_log_ids" readonly="1">
+                        <tree editable="bottom">
+                            <field name="status" string="Status" widget="badge"
+                                   decoration-success="status == 'delivered'"
+                                   decoration-warning="status == 'in_transit'"
+                                   decoration-danger="status == 'exception'"
+                                   decoration-info="status in ('shipped', 'unknown')"
+                                   decoration-muted="status == 'draft'"/>
+                            <field name="status_desc" string="Keterangan"/>
+                            <field name="location" string="Lokasi"/>
+                            <field name="event_datetime" string="Waktu"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- =========================================================
+         LIST VIEW  (extends stock.vpicktree)
+         ========================================================= -->
+    <record id="view_picking_tree_delivery_tracking" model="ir.ui.view">
+        <field name="name">stock.picking.tree.delivery.tracking</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.vpicktree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='state']" position="before">
+                <field name="delivery_tracking_status" string="Delivery Status"
+                       optional="show" widget="badge"
+                       decoration-success="delivery_tracking_status == 'delivered'"
+                       decoration-warning="delivery_tracking_status == 'in_transit'"
+                       decoration-danger="delivery_tracking_status == 'exception'"
+                       decoration-info="delivery_tracking_status in ('shipped', 'unknown')"
+                       decoration-muted="delivery_tracking_status == 'draft'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- =========================================================
+         SEARCH VIEW  (extends stock.view_picking_internal_search)
+         ========================================================= -->
+    <record id="view_picking_search_delivery_tracking" model="ir.ui.view">
+        <field name="name">stock.picking.search.delivery.tracking</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_internal_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <field name="delivery_tracking_status"/>
+            </xpath>
+            <xpath expr="//filter[@name='cancel']" position="after">
+                <separator/>
+                <filter string="Draft Resi" name="dt_draft" domain="[('delivery_tracking_status', '=', 'draft')]"/>
+                <filter string="Shipped" name="dt_shipped" domain="[('delivery_tracking_status', '=', 'shipped')]"/>
+                <filter string="In Transit" name="dt_in_transit" domain="[('delivery_tracking_status', '=', 'in_transit')]"/>
+                <filter string="Delivered" name="dt_delivered" domain="[('delivery_tracking_status', '=', 'delivered')]"/>
+                <filter string="Exception" name="dt_exception" domain="[('delivery_tracking_status', '=', 'exception')]"/>
+                <filter string="Unknown" name="dt_unknown" domain="[('delivery_tracking_status', '=', 'unknown')]"/>
+            </xpath>
+            <xpath expr="//filter[@name='picking_type']" position="after">
+                <filter string="Delivery Status" name="group_by_delivery_status"
+                        domain="[]" context="{'group_by': 'delivery_tracking_status'}"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

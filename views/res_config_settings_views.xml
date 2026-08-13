@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_delivery_tracking" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.delivery.tracking</field>
+        <field name="model">res.config.settings</field>
+        <field name="priority" eval="31"/>
+        <field name="inherit_id" ref="stock.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('app_settings_block')][@data-key='stock']//h2[hasclass('mt32')][string()='Warehouse']" position="before">
+                <h2 class="mt32">Delivery Tracking</h2>
+                <div class="row mt16 o_settings_container" name="delivery_tracking_setting_container">
+                    <div class="col-12 col-lg-6 o_setting_box" id="biteship_tracking">
+                        <div class="o_setting_left_pane">
+                            <field name="biteship_active"/>
+                        </div>
+                        <div class="o_setting_right_pane">
+                            <label for="biteship_active"/>
+                            <div class="text-muted">
+                                Pantau status pengiriman Delivery Order via API Biteship.
+                            </div>
+                            <div class="content-group" id="biteship_tracking_content"
+                                 attrs="{'invisible': [('biteship_active', '=', False)]}">
+                                <div class="row mt16">
+                                    <label string="API Key"
+                                           for="biteship_api_key"
+                                           class="col-3"/>
+                                    <field name="biteship_api_key" widget="password"
+                                           class="col-6" placeholder="biteship_live.xxx / biteship_test.xxx"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-6 o_setting_box" id="delivery_tracking_poll">
+                        <div class="o_setting_right_pane">
+                            <label for="delivery_tracking_cron_interval_minutes"/>
+                            <div class="text-muted">
+                                How often the cron polls shipping statuses from
+                                the logistics provider.
+                            </div>
+                            <div class="content-group" id="delivery_tracking_poll_content">
+                                <div class="row mt16">
+                                    <label string="Poll interval (minutes)"
+                                           for="delivery_tracking_cron_interval_minutes"
+                                           class="col-3"/>
+                                    <field name="delivery_tracking_cron_interval_minutes"
+                                           class="col-3"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-6 o_setting_box" id="delivery_tracking_batch">
+                        <div class="o_setting_right_pane">
+                            <label for="delivery_tracking_cron_batch_size"/>
+                            <div class="text-muted">
+                                Maximum number of deliveries polled per cron run,
+                                to respect the provider rate limit.
+                            </div>
+                            <div class="content-group" id="delivery_tracking_batch_content">
+                                <div class="row mt16">
+                                    <label string="Batch size per run"
+                                           for="delivery_tracking_cron_batch_size"
+                                           class="col-3"/>
+                                    <field name="delivery_tracking_cron_batch_size"
+                                           class="col-3"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>
