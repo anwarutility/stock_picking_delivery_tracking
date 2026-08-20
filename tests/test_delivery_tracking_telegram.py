@@ -194,3 +194,46 @@ class TestTrackingTelegramNotification(TransactionCase):
         picking.invalidate_recordset()
         self.assertTrue(picking.tracking_notification_sent)
         self.assertEqual(action["params"]["type"], "info")
+
+    # ---- Test 8: Biteship id present -> message carries track.biteship.com/{id} ----
+    def test_08_tracking_url_from_biteship_id(self):
+        picking = self._make_sale_picking()
+        TRACK_SINGLE = (
+            "odoo.addons.stock_picking_delivery_tracking.models."
+            "stock_picking.StockPicking._track_single"
+        )
+
+        def fake_track_single():
+            picking.write({"biteship_tracking_id": "abc123biteship"})
+            return True
+
+        with patch(TRACK_SINGLE, side_effect=fake_track_single), patch(
+            SEND_MESSAGE,
+            return_value={"ok": True},
+        ) as mock_send:
+            picking._notify_sales_telegram()
+
+        mock_send.assert_called_once()
+        chat_id, message = mock_send.call_args[0]
+        self.assertEqual(chat_id, "987654321")
+        self.assertIn("https://track.biteship.com/abc123biteship", message)
+
+    # ---- Test 9: Biteship call raises -> notification still sent with fallback ----
+    def test_09_biteship_failure_does_not_block_notification(self):
+        picking = self._make_sale_picking()
+        TRACK_SINGLE = (
+            "odoo.addons.stock_picking_delivery_tracking.models."
+            "stock_picking.StockPicking._track_single"
+        )
+        with patch(
+            TRACK_SINGLE, side_effect=Exception("API down")
+        ), patch(
+            SEND_MESSAGE,
+            return_value={"ok": True},
+        ) as mock_send:
+            picking._notify_sales_telegram()
+
+        mock_send.assert_called_once()
+        chat_id, message = mock_send.call_args[0]
+        self.assertEqual(chat_id, "987654321")
+        self.assertIn("(belum tersedia)", message)

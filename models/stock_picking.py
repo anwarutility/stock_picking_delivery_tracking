@@ -56,6 +56,12 @@ class StockPicking(models.Model):
         string="Tracking Error",
         copy=False,
     )
+    biteship_tracking_id = fields.Char(
+        string="Biteship Tracking ID",
+        copy=False,
+        help="Stable Biteship tracking object id returned by the status API. "
+        "Used to build the public tracking link shown in Telegram messages.",
+    )
     tracking_log_ids = fields.One2many(
         "delivery.tracking.log",
         "picking_id",
@@ -148,6 +154,9 @@ class StockPicking(models.Model):
         estimated_date = self._extract_estimated_date(result)
         if estimated_date:
             vals["delivery_estimated_date"] = estimated_date
+        raw = result.get("raw_response")
+        if isinstance(raw, dict) and raw.get("id"):
+            vals["biteship_tracking_id"] = raw.get("id")
         self.write(vals)
 
         existing_dates = {
@@ -333,6 +342,19 @@ class StockPicking(models.Model):
                 self.name,
             )
             return
+        # Refresh the Biteship status first so ``biteship_tracking_id`` (and
+        # thus the public tracking link) is populated before sending. A
+        # failure here must never block the notification itself.
+        try:
+            self._track_single()
+        except Exception as exc:
+            _logger.warning(
+                "Delivery tracking: Biteship refresh failed for %s before "
+                "Telegram notification, using existing data: %s",
+                self.name,
+                exc,
+            )
+        self.invalidate_recordset()
         message = self._build_tracking_notification_message()
         try:
             self._send_telegram_message(salesperson.telegram_chat_id, message)
@@ -344,9 +366,21 @@ class StockPicking(models.Model):
                 exc,
             )
 
+    def _get_tracking_url(self):
+        """Public tracking URL for the picking, best available source first.
+
+        Prefers the stable Biteship tracking object id, then falls back to
+        the core ``carrier_tracking_url`` computed field. Returns ``False`` when no
+        link is available.
+        """
+        self.ensure_one()
+        if self.biteship_tracking_id:
+            return "https://track.biteship.com/%s" % self.biteship_tracking_id
+        return self.carrier_tracking_url or False
+
     def _build_tracking_notification_message(self):
         self.ensure_one()
-        tracking_url = self.carrier_tracking_url or ""
+        tracking_url = self._get_tracking_url() or ""
         return _(
             "*DO %(name)s* sudah diinput resi\n"
             "Customer: %(customer)s\n"
