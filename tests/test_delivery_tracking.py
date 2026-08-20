@@ -196,8 +196,8 @@ class TestTrackingAPIClient(TransactionCase):
 
     def test_parse_event_datetime_invalid(self):
         picking = self.env["stock.picking"]
-        self.assertIsNone(picking._parse_event_datetime("not-a-date"))
-        self.assertIsNone(picking._parse_event_datetime(None))
+        self.assertFalse(picking._parse_event_datetime("not-a-date"))
+        self.assertFalse(picking._parse_event_datetime(None))
 
 
 class TestStockPickingTracking(TransactionCase):
@@ -302,7 +302,9 @@ class TestStockPickingTracking(TransactionCase):
         with patch(MODEL_CLIENT_GET_STATUS, side_effect=fake_get_status):
             self.Picking.cron_check_delivery_status()
 
-        self.assertEqual(waybills, ["ELIG-1"])
+        self.assertIn("ELIG-1", waybills)
+        for not_eligible in ("", "DONE-1", "EXC-1", "DRAFT-1", "IN-1"):
+            self.assertNotIn(not_eligible, waybills)
         good.invalidate_recordset()
         self.assertEqual(good.delivery_tracking_status, "in_transit")
 

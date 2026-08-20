@@ -42,6 +42,14 @@
                         attrs="{'invisible': ['|', '|', ('picking_type_code', '!=', 'outgoing'), ('state', '!=', 'done'), ('carrier_tracking_ref', '=', False)]}"/>
             </xpath>
 
+            <!-- "Kirim Ulang Notifikasi" button: manual Telegram resend -->
+            <xpath expr="//button[@name='action_check_delivery_status']" position="after">
+                <button name="action_resend_tracking_notification" type="object"
+                        string="Kirim Ulang Notifikasi"
+                        groups="stock.group_stock_user"
+                        attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('carrier_tracking_ref', '=', False)]}"/>
+            </xpath>
+
             <!-- New tab "Riwayat Tracking" -->
             <xpath expr="//notebook" position="inside">
                 <page string="Riwayat Tracking" name="delivery_tracking_history"

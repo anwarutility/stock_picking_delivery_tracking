@@ -5,52 +5,69 @@ import json
 import logging
 from datetime import datetime as dt, timezone
 
+try:
+    import requests
+except ImportError:
+    requests = None
+
 from dateutil import parser as dateutil_parser
 
 from odoo import _, fields, models
 from odoo.exceptions import UserError
 
-from odoo.addons.stock_picking_delivery_tracking.services.tracking_api_client import (
+from ..services.tracking_api_client import (
     TrackingAPIClient,
 )
 
-_logger = logging.getLogger(__name__)
-
-TRACKING_STATUS_SELECTION = [
-    ("draft", "Draft"),
-    ("shipped", "Shipped"),
-    ("in_transit", "In Transit"),
-    ("delivered", "Delivered"),
-    ("exception", "Exception"),
-    ("unknown", "Unknown"),
-]
-
-# Statuses considered "final": the cron will stop polling pickings in these.
 FINAL_TRACKING_STATUSES = ["delivered", "exception"]
+
+_logger = logging.getLogger(__name__)
 
 
 class StockPicking(models.Model):
     _inherit = "stock.picking"
 
     delivery_tracking_status = fields.Selection(
-        TRACKING_STATUS_SELECTION,
+        selection=[
+            ("draft", "Draft"),
+            ("shipped", "Shipped"),
+            ("in_transit", "In Transit"),
+            ("delivered", "Delivered"),
+            ("exception", "Exception"),
+            ("unknown", "Unknown"),
+        ],
         string="Delivery Tracking Status",
         default="draft",
+        copy=False,
+        index=True,
     )
     delivery_tracking_status_desc = fields.Char(
-        string="Delivery Status Description",
+        string="Status Description",
+        copy=False,
     )
-    delivery_last_check = fields.Datetime(string="Last Check")
-    delivery_estimated_date = fields.Datetime(string="Estimated Delivery Date")
+    delivery_last_check = fields.Datetime(
+        string="Last Checked",
+        copy=False,
+    )
+    delivery_estimated_date = fields.Datetime(
+        string="Estimated Delivery Date",
+    )
     delivery_tracking_error = fields.Char(
         string="Tracking Error",
-        help="Pesan error dari provider saat percobaan tracking terakhir "
-        "gagal. Terisi hanya jika status menjadi 'unknown'.",
+        copy=False,
     )
     tracking_log_ids = fields.One2many(
         "delivery.tracking.log",
         "picking_id",
         string="Tracking History",
+    )
+    tracking_notification_sent = fields.Boolean(
+        string="Tracking Notification Sent",
+        default=False,
+        copy=False,
+        help="True once the salesperson has been notified by Telegram that "
+        "the tracking reference was entered, so the notification is never "
+        "sent twice for the same Delivery Order.",
     )
 
     def _get_active_tracking_provider(self):
@@ -76,26 +93,27 @@ class StockPicking(models.Model):
             )
         return providers[0]
 
-    def _parse_event_datetime(self, value):
-        """Parse an API timestamp into a naive UTC datetime.
+    @staticmethod
+    def _parse_event_datetime(raw_iso_string):
+        """Convert an ISO-8601 string from the API into a UTC naive datetime.
 
-        Biteship ``updated_at`` uses ISO-8601 (``T`` separator, optional UTC
-        offset), which ``fields.Datetime.to_datetime`` cannot parse directly.
-        Returns ``None`` when the value is unparseable.
+        Returns ``False`` when parsing fails or input is empty so that bad
+        timestamps never crash the tracking pipeline.
         """
-        if not value:
-            return None
+        if not raw_iso_string:
+            return False
         try:
-            parsed = dateutil_parser.isoparse(str(value))
-        except (ValueError, TypeError):
-            try:
-                parsed = dateutil_parser.parse(str(value))
-            except (ValueError, TypeError, OverflowError):
-                _logger.debug("Unparseable tracking timestamp: %r", value)
-                return None
-        if parsed.tzinfo is not None:
-            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-        return parsed
+            parsed = dateutil_parser.isoparse(raw_iso_string)
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+            return parsed
+        except (ValueError, TypeError) as exc:
+            _logger.warning(
+                "Delivery tracking: failed to parse event datetime '%s': %s",
+                raw_iso_string,
+                exc,
+            )
+            return False
 
     def _extract_estimated_date(self, result):
         """Best-effort estimated delivery date from the raw Biteship response.
@@ -115,23 +133,13 @@ class StockPicking(models.Model):
         return False
 
     def _process_tracking_result(self, result):
-        """Apply a normalized tracking result to this picking.
-
-        - Always updates ``delivery_last_check`` (even on error) so failing
-          pickings are not retried on every poll.
-        - Creates one ``delivery.tracking.log`` per history entry whose event
-          datetime is not yet recorded (prevents duplicate logs each poll).
-        """
+        """Map API response to ``stock.picking`` fields and append new history logs."""
         self.ensure_one()
-        now = fields.Datetime.now()
         vals = {
-            "delivery_last_check": now,
             "delivery_tracking_status": result.get("status") or "unknown",
             "delivery_tracking_status_desc": result.get("status_desc"),
+            "delivery_last_check": fields.Datetime.now(),
         }
-        # Persist the provider error whenever the check did not yield a real
-        # status, so warehouse staff can see WHY a picking is stuck on Unknown
-        # without digging into logs or a shell.
         error_message = result.get("error")
         if error_message and result.get("status") == "unknown":
             vals["delivery_tracking_error"] = error_message
@@ -273,6 +281,132 @@ class StockPicking(models.Model):
                 "title": _("Cek Status Pengiriman"),
                 "message": message,
                 "type": notification_type,
+                "sticky": False,
+            },
+        }
+
+    def write(self, vals):
+        """Trigger a one-time Telegram notification to the salesperson as
+        soon as ``carrier_tracking_ref`` is entered.
+
+        A failed Telegram send must never roll back / fail the picking
+        write, so everything notification-related is wrapped in try/except.
+        """
+        res = super().write(vals)
+        if "carrier_tracking_ref" in vals:
+            icp = self.env["ir.config_parameter"].sudo()
+            enabled = (
+                icp.get_param(
+                    "stock_picking_delivery_tracking.notify_sales_enabled",
+                    default="True",
+                )
+                == "True"
+            )
+            if enabled:
+                for picking in self:
+                    if (
+                        picking.carrier_tracking_ref
+                        and not picking.tracking_notification_sent
+                    ):
+                        try:
+                            picking._notify_sales_telegram()
+                        except Exception:
+                            _logger.exception(
+                                "Delivery tracking Telegram notification "
+                                "failed for %s",
+                                picking.name,
+                            )
+        return res
+
+    def _notify_sales_telegram(self):
+        """Send the tracking-reference notification to the DO's salesperson.
+
+        Sets ``tracking_notification_sent`` only after a successful send so
+        that a transient failure can be retried manually.
+        """
+        self.ensure_one()
+        salesperson = self.sale_id.user_id if self.sale_id else False
+        if not salesperson or not salesperson.telegram_chat_id:
+            _logger.info(
+                "DO %s: salesperson has no telegram_chat_id, "
+                "notification skipped",
+                self.name,
+            )
+            return
+        message = self._build_tracking_notification_message()
+        try:
+            self._send_telegram_message(salesperson.telegram_chat_id, message)
+            self.tracking_notification_sent = True
+        except Exception as exc:
+            _logger.error(
+                "Gagal kirim notifikasi Telegram DO %s: %s",
+                self.name,
+                exc,
+            )
+
+    def _build_tracking_notification_message(self):
+        self.ensure_one()
+        tracking_url = self.carrier_tracking_url or ""
+        return _(
+            "*DO %(name)s* sudah diinput resi\n"
+            "Customer: %(customer)s\n"
+            "Kurir: %(courier)s\n"
+            "No. Resi: %(resi)s\n"
+            "Link Tracking: %(url)s"
+        ) % {
+            "name": self.name or "-",
+            "customer": self.partner_id.name or "-",
+            "courier": self.carrier_id.name or "-",
+            "resi": self.carrier_tracking_ref or "-",
+            "url": tracking_url or "(belum tersedia)",
+        }
+
+    def _send_telegram_message(self, chat_id, message):
+        token = (
+            self.env["ir.config_parameter"]
+            .sudo()
+            .get_param(
+                "stock_picking_delivery_tracking.telegram_bot_token",
+                default="",
+            )
+        )
+        if not token:
+            raise UserError(
+                _("Telegram bot token belum dikonfigurasi di Settings")
+            )
+        if requests is None:
+            raise RuntimeError(
+                _("Library 'requests' tidak tersedia di server")
+            )
+        url = "https://api.telegram.org/bot%s/sendMessage" % token
+        payload = {
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": "Markdown",
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        return response.json()
+
+    def action_resend_tracking_notification(self):
+        """Manually resend the Telegram notification to the salesperson.
+
+        Useful when the salesperson registered their ``telegram_chat_id``
+        after the first attempt, or when a resend is needed.
+        """
+        for picking in self:
+            if not picking.carrier_tracking_ref:
+                raise UserError(
+                    _("DO %s belum punya nomor resi.") % picking.name
+                )
+            picking._notify_sales_telegram()
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": _("Kirim Ulang Notifikasi"),
+                "message": _("Notifikasi Telegram telah dikirim ulang."),
+                "type": "info",
                 "sticky": False,
             },
         }

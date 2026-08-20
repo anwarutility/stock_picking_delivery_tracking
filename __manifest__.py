@@ -3,7 +3,7 @@
 
 {
     "name": "Stock Picking Delivery Tracking",
-    "version": "16.0.1.0.0",
+    "version": "16.0.1.1.0",
     "summary": "Delivery status tracking via logistics API",
     "category": "Inventory",
     "author": "PT Aston Graphindo Indonesia",
@@ -14,6 +14,7 @@
         "data/ir_cron_data.xml",
         "views/stock_picking_views.xml",
         "views/delivery_tracking_dashboard.xml",
+        "views/res_users_view.xml",
         "views/res_config_settings_views.xml",
     ],
     "demo": [],
