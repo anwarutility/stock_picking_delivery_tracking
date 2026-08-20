@@ -545,3 +545,35 @@ class TestDashboardFilter(TransactionCase):
         self.assertIn(recent, visible)
         self.assertNotIn(old, visible)
         self.assertNotIn(no_resi, visible)
+
+class TestAutoTrackToggle(TransactionCase):
+    """The Auto Track via Biteship toggle must persist and read back its value
+    through the cron record referenced by its xmlid."""
+
+    def _cron(self):
+        return self.env.ref(
+            "stock_picking_delivery_tracking.cron_delivery_tracking_status_poll"
+        )
+
+    def test_toggle_saves_and_reads_back(self):
+        settings = (
+            self.env["res.config.settings"]
+            .create({})
+        )
+        settings.delivery_tracking_auto_track_enabled = True
+        settings.execute()
+        self.assertTrue(self._cron().active)
+
+        settings = self.env["res.config.settings"].create({})
+        self.assertTrue(settings.get_values()["delivery_tracking_auto_track_enabled"])
+
+        settings2 = (
+            self.env["res.config.settings"]
+            .create({})
+        )
+        settings2.delivery_tracking_auto_track_enabled = False
+        settings2.execute()
+        self.assertFalse(self._cron().active)
+
+        settings3 = self.env["res.config.settings"].create({})
+        self.assertFalse(settings3.get_values()["delivery_tracking_auto_track_enabled"])

@@ -36,7 +36,7 @@ class ResConfigSettings(models.TransientModel):
     def get_values(self):
         res = super().get_values()
         cron = self.env.ref(
-            "stock_picking_delivery_tracking.ir_cron_delivery_tracking_poll",
+            "stock_picking_delivery_tracking.cron_delivery_tracking_status_poll",
             raise_if_not_found=False,
         )
         res["delivery_tracking_auto_track_enabled"] = (
@@ -47,7 +47,7 @@ class ResConfigSettings(models.TransientModel):
     def set_values(self):
         super().set_values()
         cron = self.env.ref(
-            "stock_picking_delivery_tracking.ir_cron_delivery_tracking_poll",
+            "stock_picking_delivery_tracking.cron_delivery_tracking_status_poll",
             raise_if_not_found=False,
         )
         if cron and cron.active != self.delivery_tracking_auto_track_enabled:
