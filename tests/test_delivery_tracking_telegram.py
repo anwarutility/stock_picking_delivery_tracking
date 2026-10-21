@@ -237,3 +237,64 @@ class TestTrackingTelegramNotification(TransactionCase):
         chat_id, message = mock_send.call_args[0]
         self.assertEqual(chat_id, "987654321")
         self.assertIn("(belum tersedia)", message)
+
+    # ---- Test 10: carrier change re-sends notification with new courier ----
+    def test_10_resend_on_carrier_change(self):
+        picking = self._make_sale_picking()
+        carrier2 = self.env["delivery.carrier"].create(
+            {
+                "name": "J&T",
+                "delivery_type": "fixed",
+                "product_id": self.env["product.product"]
+                .create(
+                    {
+                        "name": "J&T Delivery",
+                        "type": "service",
+                        "list_price": 0,
+                    }
+                )
+                .id,
+            }
+        )
+        with patch(SEND_MESSAGE) as mock_send:
+            picking.write({"carrier_tracking_ref": "JNE-ABC-8"})
+            picking.write({"carrier_id": carrier2.id})
+
+        self.assertEqual(mock_send.call_count, 2)
+        second_message = mock_send.call_args_list[1].args[1]
+        self.assertIn("J&T", second_message)
+        picking.invalidate_recordset()
+        self.assertTrue(picking.tracking_notification_sent)
+
+    # ---- Test 11: link tracking tampil untuk semua pilihan carrier ----
+    def test_11_tracking_url_present_for_every_carrier(self):
+        carriers = ["JNE", "J&T", "Pos Indonesia", "Sicepat"]
+        for name in carriers:
+            carrier = self.env["delivery.carrier"].create(
+                {
+                    "name": name,
+                    "delivery_type": "fixed",
+                    "product_id": self.env["product.product"]
+                    .create(
+                        {
+                            "name": "%s Delivery" % name,
+                            "type": "service",
+                            "list_price": 0,
+                        }
+                    )
+                    .id,
+                }
+            )
+            picking = self._make_sale_picking()
+            picking.carrier_id = carrier
+            with patch(SEND_MESSAGE):
+                picking.write({"carrier_tracking_ref": "RESI-%s" % name})
+
+            picking.invalidate_recordset()
+            message = picking._build_tracking_notification_message()
+            self.assertIn(
+                picking.delivery_tracking_url,
+                message,
+                "Link tracking publik harus muncul untuk carrier %s" % name,
+            )
+            self.assertNotIn("(belum tersedia)", message)
