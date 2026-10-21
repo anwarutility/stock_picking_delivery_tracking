@@ -7,14 +7,24 @@ from odoo import api, fields, models
 class ResConfigSettings(models.TransientModel):
     _inherit = "res.config.settings"
 
+    delivery_tracking_cron_interval_minutes = fields.Integer(
+        string="Delivery Tracking Poll Interval (minutes)",
+        default=30,
+        config_parameter="delivery_tracking_cron_interval_minutes",
+    )
     delivery_tracking_cron_batch_size = fields.Integer(
-        string="Cron Batch Size",
+        string="Delivery Tracking Batch Size per Run",
         default=50,
         config_parameter="delivery_tracking_cron_batch_size",
-        help="Maksimal jumlah DO yang dicek statusnya dalam sekali jalan cron.",
     )
-    delivery_tracking_auto_track_enabled = fields.Boolean(
-        string="Auto Track via Biteship",
+    biteship_api_key = fields.Char(
+        string="Biteship API Key",
+        default="",
+        help="API key dari dashboard.biteship.com/integrations. "
+        "Prefix biteship_live. (production) atau biteship_test. (sandbox).",
+    )
+    biteship_active = fields.Boolean(
+        string="Aktifkan Tracking",
         default=True,
         help="Aktifkan polling status pengiriman ke Biteship.",
     )
@@ -35,22 +45,52 @@ class ResConfigSettings(models.TransientModel):
     @api.model
     def get_values(self):
         res = super().get_values()
-        cron = self.env.ref(
-            "stock_picking_delivery_tracking.ir_cron_delivery_tracking_poll",
-            raise_if_not_found=False,
-        )
-        res["delivery_tracking_auto_track_enabled"] = (
-            cron.active if cron else False
+        provider = self._get_biteship_provider()
+        res.update(
+            {
+                "biteship_api_key": provider.api_key if provider else "",
+                "biteship_active": provider.active if provider else True,
+            }
         )
         return res
 
     def set_values(self):
         super().set_values()
-        cron = self.env.ref(
-            "stock_picking_delivery_tracking.ir_cron_delivery_tracking_poll",
-            raise_if_not_found=False,
+        provider = self._get_biteship_provider(create=True)
+        provider.write(
+            {
+                "api_key": self.biteship_api_key or "",
+                "active": self.biteship_active,
+            }
         )
-        if cron and cron.active != self.delivery_tracking_auto_track_enabled:
-            cron.sudo().write(
-                {"active": self.delivery_tracking_auto_track_enabled}
+        if self.delivery_tracking_cron_interval_minutes:
+            cron = self.env.ref(
+                "stock_picking_delivery_tracking.cron_delivery_tracking_status_poll",
+                raise_if_not_found=False,
             )
+            if cron:
+                cron.write(
+                    {
+                        "interval_number": self.delivery_tracking_cron_interval_minutes,
+                        "interval_type": "minutes",
+                    }
+                )
+
+    def _get_biteship_provider(self, create=False):
+        providers = self.env["delivery.tracking.provider"].search(
+            [("name", "=", "Biteship")]
+        )
+        if providers:
+            return providers[0]
+        if create:
+            return self.env["delivery.tracking.provider"].create(
+                {
+                    "name": "Biteship",
+                    "api_base_url": "https://api.biteship.com",
+                    "api_key": "",
+                    "auth_type": "api_key_header",
+                    "auth_header_name": "Authorization",
+                    "active": True,
+                }
+            )
+        return self.env["delivery.tracking.provider"]

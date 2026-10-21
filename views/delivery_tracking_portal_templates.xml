@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- =========================================================
+         Assets are attached via the manifest ``assets`` key
+         (web.assets_frontend / web.assets_backend), which is the
+         supported mechanism in Odoo 16 (bundle templates are
+         virtual: there is no ``web.assets_frontend`` record to inherit).
+         ========================================================= -->
+    <!-- =========================================================
+         CUSTOMER TRACKING PAGE
+         Shared by both access paths:
+         - logged-in portal users (/my/orders/<id>/tracking)
+         - public token link        (/tracking/<token>)
+         Only tracking-safe values are rendered: order number, resi,
+         courier, ETA, timeline milestones and status history.
+         ========================================================= -->
+    <template id="portal_tracking_page" name="Delivery Order Tracking Page">
+        <t t-call="portal.portal_layout">
+            <div class="o_dtd_page">
+                <!-- Header summary card -->
+                <div class="card bg-white o_dtd_header">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                            <div>
+                                <h4 class="mb-0">
+                                    <i class="fa fa-truck me-2 text-muted"/>Lacak Pengiriman
+                                </h4>
+                                <div class="text-muted">Nomor Pesanan: <b t-out="picking_name"/></div>
+                            </div>
+                            <div class="text-muted small">
+                                <span t-if="is_public">
+                                    <i class="fa fa-lock me-1"/>Link tidak perlu login
+                                </span>
+                                <span t-else="">
+                                    <i class="fa fa-user-o me-1"/><t t-out="partner_name"/>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1 o_dtd_meta">
+                            <div class="col-6 col-md-3">
+                                <div class="o_dtd_meta_label">No. Resi</div>
+                                <b t-out="resi or 'Belum tersedia'"/>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="o_dtd_meta_label">Kurir</div>
+                                <t t-out="courier_name"/>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="o_dtd_meta_label">Estimasi Tiba</div>
+                                <t t-out="eta_display or '—'"/>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="o_dtd_meta_label">Status</div>
+                                <span t-attf-class="badge rounded-pill o_dtd_status_badge {{(status == 'delivered' and 'text-bg-success') or (status == 'exception' and 'text-bg-danger') or (status in ('in_transit', 'shipped') and 'text-bg-primary') or 'text-bg-secondary'}}"
+                                      t-out="current_status['label']"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Exception banner -->
+                <div t-if="exception" class="alert alert-danger o_dtd_exception mt-3">
+                    <div class="d-flex align-items-start">
+                        <i class="fa fa-exclamation-triangle me-2 mt-1"/>
+                        <div>
+                            <b>Pengiriman mengalami kendala.</b>
+                            <div t-if="exception['desc']" class="small mt-1" t-out="exception['desc']"/>
+                            <div t-if="exception['error']" class="small text-muted mt-1" t-out="exception['error']"/>
+                            <div class="small mt-1">Silakan hubungi kami untuk informasi lebih lanjut.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Unknown status banner -->
+                <div t-if="unknown and not exception" class="alert alert-warning o_dtd_unknown mt-3">
+                    <i class="fa fa-info-circle me-2"/>Status pengiriman belum dapat diperbarui saat ini. Silakan coba lagi beberapa saat.
+                </div>
+
+                <!-- Timeline / stepper -->
+                <div class="card bg-white mt-3">
+                    <div class="card-body">
+                        <div class="o_dtd_stepper" role="list">
+                            <t t-foreach="steps" t-as="step">
+                                <div t-attf-class="o_dtd_step {{step['reached'] and 'is-done' or ''}} {{step['current'] and 'is-current' or ''}} {{step_last and 'is-last' or ''}}"
+                                     role="listitem">
+                                    <div class="o_dtd_step_icon">
+                                        <i t-if="step['reached']" class="fa fa-check"/>
+                                        <i t-else="" class="fa fa-circle-o"/>
+                                    </div>
+                                    <div class="o_dtd_step_body">
+                                        <div class="o_dtd_step_label" t-out="step['label']"/>
+                                        <div class="o_dtd_step_ts" t-if="step['ts_display']" t-out="step['ts_display']"/>
+                                    </div>
+                                </div>
+                            </t>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current status + collapsible history -->
+                <div class="card bg-white mt-3">
+                    <div class="card-body">
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <h6 class="o_dtd_section_title">Status Terkini</h6>
+                                <div class="o_dtd_current_status">
+                                    <b t-out="current_status['label']"/>
+                                    <div t-if="current_status['desc']" class="small mt-1" t-out="current_status['desc']"/>
+                                    <div t-if="last_check_display" class="small text-muted mt-1">
+                                        <i class="fa fa-clock-o me-1"/>Diperbarui
+                                        <t t-out="last_check_display"/>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="o_dtd_section_title">Riwayat</h6>
+                                <details class="o_dtd_history">
+                                    <summary class="btn btn-sm btn-light">Lihat Riwayat Status</summary>
+                                    <div class="mt-2">
+                                        <t t-foreach="history" t-as="h">
+                                            <div class="o_dtd_history_item">
+                                                <div class="o_dtd_hist_row">
+                                                    <span class="o_dtd_hist_ts" t-out="h['ts_display'] or '—'"/>
+                                                    <b class="ms-2" t-out="h['status_label']"/>
+                                                </div>
+                                                <div t-if="h['desc']" class="o_dtd_hist_desc small" t-out="h['desc']"/>
+                                                <div t-if="h['location']" class="o_dtd_hist_loc small text-muted">
+                                                    <i class="fa fa-map-marker me-1"/><t t-out="h['location']"/>
+                                                </div>
+                                            </div>
+                                        </t>
+                                        <p t-if="not history" class="text-muted small mb-0">Belum ada riwayat status.</p>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div t-if="not is_public">
+                    <a href="/my/orders" class="btn btn-secondary o_dtd_back">
+                        <i class="fa fa-arrow-left me-1"/>Kembali ke Pesanan Saya
+                    </a>
+                </div>
+            </div>
+        </t>
+    </template>
+
+    <!-- =========================================================
+         MY ORDERS LIST: add a "Tracking" column (access via portal login)
+         ========================================================= -->
+    <record id="portal_my_orders_tracking_column" model="ir.ui.view">
+        <field name="name">sale.portal_my_orders.delivery.tracking</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.portal_my_orders"/>
+        <field name="arch" type="xml">
+            <xpath expr="//thead/tr/th[last()]" position="after">
+                <th class="text-end">Tracking</th>
+            </xpath>
+            <xpath expr="//tr/td[last()]" position="after">
+                <td class="text-end">
+                    <t t-set="picking_order_track"
+                       t-value="request.env['stock.picking'].sudo().search([('sale_id', '=', order.id), ('picking_type_code', '=', 'outgoing'), ('carrier_tracking_ref', '!=', False)], limit=1)"/>
+                    <a t-if="picking_order_track"
+                       t-att-href="'/my/orders/%s/tracking' % order.id">Lihat</a>
+                    <span t-else="" class="text-muted">—</span>
+                </td>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

@@ -8,6 +8,39 @@ Integrasi pengiriman dengan API Biteship
 - Dashboard kanban status tracking.
 - Notifikasi Telegram satu kali ke Salesperson (penanggung jawab SO) saat
   nomor resi (`carrier_tracking_ref`) pertama kali diinput pada DO.
+- **Portal tracking customer** — halaman timeline/stepper status pengiriman,
+  bisa diakses lewat login portal (`/my/orders`) atau link publik tanpa login
+  (`/tracking/<token>`).
+
+## Portal Tracking Customer
+
+### 1. Akses Login (Portal)
+
+Customer dengan akun portal membuka **My Orders** → kolom **Tracking** untuk
+melihat timeline pengiriman order miliknya. Akses dibatasi ke partner pemilik
+order (customer lain tidak bisa membuka meskipun menebak ID).
+
+### 2. Akses Publik (Link Token)
+
+Untuk customer tanpa akun portal, sales/CS bisa mengirim link tracking:
+
+1. Buka form Delivery Order (outgoing).
+2. Copy field **"Link Tracking Publik"** (tombol copy tersedia langsung di
+   form, widget `CopyClipboardURL`).
+3. Kirim link via WhatsApp/email.
+
+Format URL: `https://<base-url>/tracking/<token>`. Token di-generate otomatis
+saat DO dibuat dan diganti otomatis saat nomor resi atau kurir diubah.
+
+### 3. Timeline
+
+6 milestone: Order Dibuat → Diproses → Dikirim → Dalam Perjalanan → Diantar →
+Selesai (+ banner untuk status kendala/retur atau belum diketahui). Responsive
+horizontal di desktop, vertikal di mobile. Riwayat status detail bisa
+di-expand.
+
+> Keamanan: halaman publik hanya menampilkan data tracking (resi, kurir, ETA,
+> timeline, riwayat). Tidak ada harga, alamat lengkap, atau data pelanggan lain.
 
 ## Setup Notifikasi Telegram ke Sales
 
@@ -55,10 +88,12 @@ notifikasi pertama gagal, atau butuh kirim ulang.
 ## Known Limitations
 
 - **Notifikasi hanya ter-trigger lewat `write()`** saat `carrier_tracking_ref`
-  berubah dari kosong menjadi terisi. Proses `create()` dengan
+  berubah (dari kosong menjadi terisi) atau saat `carrier_id` diubah.
+  Proses `create()` dengan
   `carrier_tracking_ref` sudah terisi langsung (misal bulk import, migrasi
   data dari sistem lain, atau pembuatan DO lewat API) TIDAK memicu notifikasi
   otomatis.
 - Untuk DO hasil bulk import / migrasi dengan resi yang butuh notifikasi,
   trigger manual lewat button **"Kirim Ulang Notifikasi"** pada form DO, atau
   lewat script terpisah (panggil `picking._notify_sales_telegram()` per DO).
+

@@ -32,6 +32,11 @@
                 <field name="delivery_tracking_error" readonly="1"
                        class="text-danger"
                        attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_error', '=', False)]}"/>
+                <label for="delivery_tracking_url" string="Link Tracking Publik"
+                       attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"/>
+                <field name="delivery_tracking_url" class="o_dtd_backend_url"
+                       readonly="1" widget="CopyClipboardURL"
+                       attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"/>
             </xpath>
 
             <!-- "Cek Status Pengiriman" button in the header -->
@@ -68,6 +73,24 @@
                         </tree>
                     </field>
                 </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Override base delivery view: make carrier_id and carrier_tracking_ref
+         editable even when the picking state is done/cancel, so a wrong
+         carrier or tracking number can be corrected after validation. -->
+    <record id="view_picking_form_carrier_tracking_ref_editable" model="ir.ui.view">
+        <field name="name">stock.picking.form.carrier.tracking.ref.editable</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='carrier_id']" position="attributes">
+                <attribute name="attrs">{}</attribute>
+            </xpath>
+            <xpath expr="//field[@name='carrier_tracking_ref']" position="attributes">
+                <attribute name="attrs">{}</attribute>
             </xpath>
         </field>
     </record>

@@ -1,0 +1,152 @@
+// Delivery Tracking Portal - customer-facing stepper/timeline.
+// Scoped under .o_dtd_* so it never collides with the default portal theme.
+
+.o_dtd_page {
+    max-width: 100%;
+}
+
+.o_dtd_meta_label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8a92a3;
+    margin-bottom: 2px;
+}
+
+.o_dtd_section_title {
+    font-weight: 600;
+    color: #6c757d;
+}
+
+/* ---------------- Stepper ---------------- */
+
+.o_dtd_stepper {
+    display: flex;
+    align-items: flex-start;
+    padding: 4px 0;
+}
+
+.o_dtd_step {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+    padding: 4px 4px 0;
+}
+
+/* Connector line between icons; hidden on the last step. */
+.o_dtd_step:not(.is-last)::after {
+    content: "";
+    position: absolute;
+    top: 24px;
+    left: calc(50% + 23px);
+    width: calc(100% - 46px);
+    height: 3px;
+    border-radius: 2px;
+    background: #dfe3ea;
+    z-index: 0;
+}
+.o_dtd_step.is-done:not(.is-last)::after {
+    background: #3bb15d;
+}
+
+.o_dtd_step_icon {
+    position: relative;
+    z-index: 1;
+    width: 46px;
+    height: 46px;
+    margin: 0 auto;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #dfe3ea;
+    color: #9aa0ae;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+.o_dtd_step.is-done .o_dtd_step_icon {
+    background: #3bb15d;
+    border-color: #3bb15d;
+    color: #fff;
+}
+.o_dtd_step.is-current .o_dtd_step_icon {
+    border-color: #0086b3;
+    background: #fff;
+    color: #0086b3;
+    animation: o_dtd_pulse 1.8s ease-out infinite;
+}
+.o_dtd_step_label {
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #6c757d;
+}
+.o_dtd_step.is-done .o_dtd_step_label,
+.o_dtd_step.is-current .o_dtd_step_label {
+    color: #212529;
+}
+.o_dtd_step_ts {
+    font-size: 11px;
+    color: #9aa0ae;
+    margin-top: 2px;
+}
+
+@keyframes o_dtd_pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(0, 134, 179, 0.45); }
+    70%  { box-shadow: 0 0 0 12px rgba(0, 134, 179, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 134, 179, 0); }
+}
+
+/* ---------------- History ---------------- */
+
+.o_dtd_history_item {
+    padding: 8px 0;
+    border-top: 1px dashed #e9ecef;
+}
+.o_dtd_history_item:first-of-type {
+    border-top: 0;
+    padding-top: 4px;
+}
+.o_dtd_hist_ts {
+    font-size: 12px;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+/* ---------------- Responsive: vertical stepper ---------------- */
+
+@media (max-width: 620px) {
+    .o_dtd_stepper {
+        flex-direction: column;
+    }
+    .o_dtd_step {
+        display: flex;
+        align-items: flex-start;
+        text-align: left;
+        gap: 12px;
+        padding: 0 0 24px 0;
+    }
+    .o_dtd_step:not(.is-last)::after {
+        top: 44px;
+        left: 21px;
+        width: 3px;
+        height: calc(100% - 20px);
+        background: #dfe3ea;
+    }
+    .o_dtd_step.is-done:not(.is-last)::after {
+        background: #3bb15d;
+    }
+    .o_dtd_step_icon {
+        margin: 0;
+        flex: 0 0 42px;
+        width: 42px;
+        height: 42px;
+    }
+    .o_dtd_step_body {
+        padding-top: 3px;
+    }
+    .o_dtd_step_label {
+        margin-top: 0;
+    }
+}

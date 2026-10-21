@@ -103,18 +103,32 @@ class TestTrackingTelegramNotification(TransactionCase):
         picking.invalidate_recordset()
         self.assertTrue(picking.tracking_notification_sent)
 
-    # ---- Test 2: never sent twice when resi is edited again ----
-    def test_02_no_double_send_on_resi_edit(self):
+    # ---- Test 2: resi change re-sends notification with the new resi ----
+    def test_02_resend_on_resi_change(self):
         picking = self._make_sale_picking()
         with patch(SEND_MESSAGE) as mock_send:
             picking.write({"carrier_tracking_ref": "JNE-ABC-1"})
             picking.write({"carrier_tracking_ref": "JNE-ABC-1-CORRECTED"})
 
+        self.assertEqual(mock_send.call_count, 2)
+        second_message = mock_send.call_args_list[1].args[1]
+        self.assertIn("JNE-ABC-1-CORRECTED", second_message)
+        self.assertNotIn("JNE-ABC-1-CORRECTED", mock_send.call_args_list[0].args[1])
+        picking.invalidate_recordset()
+        self.assertTrue(picking.tracking_notification_sent)
+
+    # ---- Test 2b: writing the same resi again does not double-send ----
+    def test_02b_no_double_send_on_same_value(self):
+        picking = self._make_sale_picking()
+        with patch(SEND_MESSAGE) as mock_send:
+            picking.write({"carrier_tracking_ref": "JNE-ABC-1"})
+            picking.write({"carrier_tracking_ref": "JNE-ABC-1"})
+
         mock_send.assert_called_once()
         picking.invalidate_recordset()
         self.assertTrue(picking.tracking_notification_sent)
 
-    # ---- Test 3: missing chat_id skips gracefully without error ----
+    # ---- Test 3: salesperson without chat_id does not error / block ----
     def test_03_no_chat_id_skips_without_error(self):
         self.salesperson.telegram_chat_id = False
         picking = self._make_sale_picking()
@@ -160,21 +174,16 @@ class TestTrackingTelegramNotification(TransactionCase):
         with patch(SEND_MESSAGE):
             picking.write({"carrier_tracking_ref": "JNE-ABC-6"})
 
-        with patch(
-            "odoo.addons.delivery.models.delivery_carrier."
-            "DeliveryCarrier.get_tracking_link",
-            return_value="https://track.example.com/JNE-ABC-6",
-        ):
-            picking.invalidate_recordset()
-            message = picking._build_tracking_notification_message()
+        picking.invalidate_recordset()
+        message = picking._build_tracking_notification_message()
 
         self.assertIn(picking.name, message)
         self.assertIn(self.partner.name, message)
         self.assertIn(self.carrier.name, message)
         self.assertIn("JNE-ABC-6", message)
-        self.assertIn("https://track.example.com/JNE-ABC-6", message)
+        self.assertIn(picking.delivery_tracking_url, message)
 
-    # ---- Test 7: manual resend button retries a previously failed send ----
+    # ---- Bonus: manual resend button retries a previously failed send ----
     def test_07_manual_resend_button(self):
         picking = self._make_sale_picking()
         with patch(
@@ -194,3 +203,64 @@ class TestTrackingTelegramNotification(TransactionCase):
         picking.invalidate_recordset()
         self.assertTrue(picking.tracking_notification_sent)
         self.assertEqual(action["params"]["type"], "info")
+
+    # ---- Test 8: carrier change re-sends notification with new courier ----
+    def test_08_resend_on_carrier_change(self):
+        picking = self._make_sale_picking()
+        carrier2 = self.env["delivery.carrier"].create(
+            {
+                "name": "J&T",
+                "delivery_type": "fixed",
+                "product_id": self.env["product.product"]
+                .create(
+                    {
+                        "name": "J&T Delivery",
+                        "type": "service",
+                        "list_price": 0,
+                    }
+                )
+                .id,
+            }
+        )
+        with patch(SEND_MESSAGE) as mock_send:
+            picking.write({"carrier_tracking_ref": "JNE-ABC-8"})
+            picking.write({"carrier_id": carrier2.id})
+
+        self.assertEqual(mock_send.call_count, 2)
+        second_message = mock_send.call_args_list[1].args[1]
+        self.assertIn("J&T", second_message)
+        picking.invalidate_recordset()
+        self.assertTrue(picking.tracking_notification_sent)
+
+    # ---- Test 9: link tracking tampil untuk semua pilihan carrier ----
+    def test_09_tracking_url_present_for_every_carrier(self):
+        carriers = ["JNE", "J&T", "Pos Indonesia", "Sicepat"]
+        for name in carriers:
+            carrier = self.env["delivery.carrier"].create(
+                {
+                    "name": name,
+                    "delivery_type": "fixed",
+                    "product_id": self.env["product.product"]
+                    .create(
+                        {
+                            "name": "%s Delivery" % name,
+                            "type": "service",
+                            "list_price": 0,
+                        }
+                    )
+                    .id,
+                }
+            )
+            picking = self._make_sale_picking()
+            picking.carrier_id = carrier
+            with patch(SEND_MESSAGE):
+                picking.write({"carrier_tracking_ref": "RESI-%s" % name})
+
+            picking.invalidate_recordset()
+            message = picking._build_tracking_notification_message()
+            self.assertIn(
+                picking.delivery_tracking_url,
+                message,
+                "Link tracking publik harus muncul untuk carrier %s" % name,
+            )
+            self.assertNotIn("(belum tersedia)", message)
