@@ -12,6 +12,22 @@ Integrasi pengiriman dengan API Biteship
   bisa diakses lewat login portal (`/my/orders`) atau link publik tanpa login
   (`/tracking/<token>`).
 
+## Lingkungan & Database
+
+Modul ini dipasang di dua instansi Odoo dengan database yang berbeda:
+
+| Server/Instansi | Database Yang Dipakai |
+|---|---|
+| **AGI** (Production PT Aston Graphindo Indonesia) | `agi` |
+| **ASN** | `based` |
+
+> Catatan deploy: saat update/upgrade modul, pastikan menjalankannya pada
+> database sesuai instansi — `-d agi` jika modul berjalan di server AGI, atau
+> `-d based` jika modul berjalan di server ASN. Jangan salah database saat
+> meng-upgrade karena migration `16.0.1.5.0`
+> (backfill token tracking publik) hanya berlaku pada database tempat modul
+> di-upgrade.
+
 ## Portal Tracking Customer
 
 ### 1. Akses Login (Portal)
