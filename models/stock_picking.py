@@ -134,9 +134,13 @@ class StockPicking(models.Model):
         """Public no-login tracking URL built from the secret token."""
         for picking in self:
             token = picking.delivery_tracking_token
-            picking.delivery_tracking_url = (
-                "%s/tracking/%s" % (picking.get_base_url(), token) if token else False
-            )
+            if not token:
+                picking.delivery_tracking_url = False
+                continue
+            base_url = picking.get_base_url()
+            if base_url.startswith("http://") and "orimax.co.id" in base_url:
+                base_url = "https://" + base_url[len("http://"):]
+            picking.delivery_tracking_url = "%s/tracking/%s" % (base_url, token)
 
     def _ensure_delivery_tracking_token(self):
         """Set a fresh secret token on pickings that do not have one yet.
@@ -637,7 +641,7 @@ class StockPicking(models.Model):
 
     def _build_tracking_notification_message(self):
         self.ensure_one()
-        tracking_url = self._get_tracking_url() or self.delivery_tracking_url or ""
+        tracking_url = self.delivery_tracking_url or self._get_tracking_url() or ""
         return _(
             "*DO %(name)s* sudah diinput resi\n"
             "Customer: %(customer)s\n"
