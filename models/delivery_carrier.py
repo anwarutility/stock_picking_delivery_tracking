@@ -16,9 +16,19 @@ class DeliveryCarrier(models.Model):
     @api.model
     def _ensure_jnt_cargo_carrier(self):
         """Ensure J&T Cargo carrier exists and is mapped to biteship_courier_code='jntcargo'."""
-        carrier = self.search([("biteship_courier_code", "=", "jntcargo")], limit=1)
-        if not carrier:
-            carrier = self.search([("name", "ilike", "J&T Cargo")], limit=1)
+        carrier = self.env.ref(
+            "stock_picking_delivery_tracking.delivery_carrier_jntcargo",
+            raise_if_not_found=False,
+        )
+        if not carrier or not carrier.exists():
+            carrier = self.search(
+                [
+                    "|",
+                    ("biteship_courier_code", "=", "jntcargo"),
+                    ("name", "ilike", "J&T Cargo"),
+                ],
+                limit=1,
+            )
         if not carrier:
             product = self.env.ref(
                 "stock_picking_delivery_tracking.product_product_delivery_jntcargo",
@@ -53,19 +63,10 @@ class DeliveryCarrier(models.Model):
             )
         else:
             vals = {}
-            if not carrier.biteship_courier_code:
+            if carrier.biteship_courier_code != "jntcargo":
                 vals["biteship_courier_code"] = "jntcargo"
             if not carrier.active:
                 vals["active"] = True
             if vals:
                 carrier.write(vals)
         return carrier
-
-    def init(self):
-        super().init()
-        # Ensure default J&T Cargo carrier exists upon module load/upgrade
-        try:
-            self._ensure_jnt_cargo_carrier()
-        except Exception:
-            # Table or models may still be initializing in some phase
-            pass
