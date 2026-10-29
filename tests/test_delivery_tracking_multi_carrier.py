@@ -93,3 +93,9 @@ class TestDeliveryTrackingTwoCarriers(TransactionCase):
         self.assertEqual(data2["resi"], "JNT-2002")
         self.assertEqual(data2["other_carrier"]["label"], "Kurir 1")
         self.assertEqual(data2["other_carrier"]["resi"], "JNE-1001")
+
+    def test_04_ensure_jnt_cargo_carrier(self):
+        carrier = self.env["delivery.carrier"]._ensure_jnt_cargo_carrier()
+        self.assertTrue(carrier.exists())
+        self.assertEqual(carrier.biteship_courier_code, "jntcargo")
+        self.assertTrue(carrier.active)

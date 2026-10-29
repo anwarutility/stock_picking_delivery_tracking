@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Inherit Delivery Carrier Form View to expose biteship_courier_code -->
+    <record id="view_delivery_carrier_form_inherit_delivery_tracking" model="ir.ui.view">
+        <field name="name">delivery.carrier.form.inherit.delivery.tracking</field>
+        <field name="model">delivery.carrier</field>
+        <field name="inherit_id" ref="delivery.view_delivery_carrier_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='provider_details']" position="inside">
+                <field name="biteship_courier_code" placeholder="e.g. jntcargo, jne, jnt, wahana, pos, lion"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Delivery Carrier Tree View to show biteship_courier_code -->
+    <record id="view_delivery_carrier_tree_inherit_delivery_tracking" model="ir.ui.view">
+        <field name="name">delivery.carrier.tree.inherit.delivery.tracking</field>
+        <field name="model">delivery.carrier</field>
+        <field name="inherit_id" ref="delivery.view_delivery_carrier_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='delivery_type']" position="after">
+                <field name="biteship_courier_code" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>
