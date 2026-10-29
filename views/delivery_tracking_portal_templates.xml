@@ -2,155 +2,336 @@
 <odoo>
 
     <!-- =========================================================
-         CUSTOMER TRACKING PAGE
+         CUSTOMER TRACKING PAGE (Biteship Live Experience)
          Shared by both access paths:
          - logged-in portal users (/my/orders/<id>/tracking)
          - public token link        (/tracking/<token>)
-         Only tracking-safe values are rendered: order number, resi,
-         courier, ETA, timeline milestones and status history.
+         Features:
+         - Web (Desktop) & Mobile View Switcher
+         - Origin -> Destination Route Card
+         - Live Progress Tracking Timeline (Vertical Checkpoints)
+         - Stepper Milestones
+         - Multi-Courier Segmented Selector
          ========================================================= -->
     <template id="portal_tracking_page" name="Delivery Order Tracking Page">
         <t t-call="portal.portal_layout">
-            <div class="o_dtd_page">
-                <!-- Header summary card -->
-                <div class="card bg-white o_dtd_header">
-                    <div class="card-body">
-                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+            <div t-attf-class="o_dtd_page {{is_public and 'o_dtd_public_view' or ''}}" id="dtd_root">
+
+                <!-- VIEW MODE SWITCHER & VERIFIED BADGE -->
+                <div class="o_dtd_view_header">
+                    <div class="d-flex align-items-center">
+                        <span class="badge text-bg-success px-2 py-1 rounded-pill me-2">
+                            <i class="fa fa-shield me-1"/> Resmi Terverifikasi
+                        </span>
+                        <span class="text-muted small d-none d-sm-inline">
+                            Lacak Pengiriman Online • <t t-out="origin_info['name']"/>
+                        </span>
+                    </div>
+
+                    <!-- Web vs Mobile Switcher -->
+                    <div class="o_dtd_mode_switcher" role="group" aria-label="Mode Tampilan">
+                        <button type="button" class="o_dtd_mode_btn is-active" id="btn_dtd_web" onclick="dtdSetViewMode('web')">
+                            <i class="fa fa-desktop me-1"/> Tampilan Web
+                        </button>
+                        <button type="button" class="o_dtd_mode_btn" id="btn_dtd_mobile" onclick="dtdSetViewMode('mobile')">
+                            <i class="fa fa-mobile me-1"/> Tampilan Mobile
+                        </button>
+                    </div>
+                </div>
+
+                <!-- MAIN WRAPPER (Switches between desktop layout and mobile phone mockup frame) -->
+                <div class="o_dtd_layout_wrap mode-web" id="dtd_layout_wrap">
+
+                    <!-- BRAND & ORDER CARD -->
+                    <div class="o_dtd_brand_card">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                             <div>
-                                <h4 class="mb-0">
-                                    <i class="fa fa-truck me-2 text-muted"/>Lacak Pengiriman
-                                    <span t-if="carrier_label" class="badge text-bg-secondary ms-2 small" t-out="carrier_label"/>
-                                </h4>
-                                <div class="text-muted">Nomor Pesanan: <b t-out="picking_name"/></div>
+                                <div class="o_dtd_brand_title">
+                                    <i class="fa fa-truck text-primary"/>
+                                    <t t-out="origin_info['name']"/>
+                                </div>
+                                <div class="o_dtd_order_badge">
+                                    Nomor Pesanan: <strong class="text-dark" t-out="picking_name"/>
+                                </div>
                             </div>
-                            <div class="text-muted small">
-                                <span t-if="is_public">
-                                    <i class="fa fa-lock me-1"/>Link tidak perlu login
+                            <div class="text-end">
+                                <span t-if="is_public" class="badge text-bg-light border text-muted">
+                                    <i class="fa fa-globe me-1"/> Link Publik (No Login)
                                 </span>
-                                <span t-else="">
-                                    <i class="fa fa-user-o me-1"/><t t-out="partner_name"/>
+                                <span t-else="" class="badge text-bg-light border text-muted">
+                                    <i class="fa fa-user-o me-1"/> <t t-out="partner_name"/>
                                 </span>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Single carrier format as requested -->
-                        <div class="row g-2 mt-1 o_dtd_meta">
-                            <div class="col-6 col-md-3">
-                                <div class="o_dtd_meta_label">No. Resi</div>
-                                <b t-out="resi or 'Belum tersedia'"/>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="o_dtd_meta_label">Kurir</div>
-                                <t t-out="courier_name"/>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="o_dtd_meta_label">Estimasi Tiba</div>
-                                <t t-out="eta_display or '—'"/>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="o_dtd_meta_label">Status</div>
-                                <span t-attf-class="badge rounded-pill o_dtd_status_badge {{(status == 'delivered' and 'text-bg-success') or (status == 'exception' and 'text-bg-danger') or (status in ('in_transit', 'shipped') and 'text-bg-primary') or 'text-bg-secondary'}}"
-                                      t-out="current_status['label']"/>
-                            </div>
-                        </div>
-
-                        <!-- Switcher / Notice to other carrier if present -->
-                        <div t-if="other_carrier" class="alert alert-info py-2 px-3 mt-3 d-flex flex-wrap justify-content-between align-items-center gap-2 mb-0">
-                            <div class="small">
-                                <i class="fa fa-truck me-2"/>Pengiriman ini juga memiliki <b t-out="other_carrier['label']"/>: <t t-out="other_carrier['name']"/> (Resi: <t t-out="other_carrier['resi']"/>)
-                            </div>
-                            <a t-att-href="other_carrier['url']" class="btn btn-sm btn-primary">
-                                Lacak <t t-out="other_carrier['label']"/> <i class="fa fa-arrow-right ms-1"/>
+                    <!-- MULTI-COURIER SEGMENTED TABS (IF MULTIPLE COURIERS) -->
+                    <div t-if="courier_tabs and len(courier_tabs) &gt; 1" class="o_dtd_courier_segmented">
+                        <t t-foreach="courier_tabs" t-as="ct">
+                            <a t-att-href="ct['is_active'] and '#' or ct['url']"
+                               t-attf-class="o_dtd_courier_seg_item {{ct['is_active'] and 'is-active' or ''}}">
+                                <span class="o_dtd_seg_tag"><t t-out="ct['label']"/></span>
+                                <span class="o_dtd_seg_name"><t t-out="ct['name']"/></span>
+                                <span class="o_dtd_seg_resi"><t t-out="ct['resi'] or 'Belum ada resi'"/></span>
                             </a>
+                        </t>
+                    </div>
+
+                    <!-- EXCEPTION BANNER -->
+                    <div t-if="exception" class="alert alert-danger o_dtd_exception rounded-4 shadow-sm mb-3">
+                        <div class="d-flex align-items-start">
+                            <i class="fa fa-exclamation-triangle fs-4 me-3 mt-1 text-danger"/>
+                            <div>
+                                <h6 class="mb-1 font-weight-bold">Pengiriman Mengalami Kendala</h6>
+                                <div t-if="exception['desc']" class="small" t-out="exception['desc']"/>
+                                <div t-if="exception['error']" class="small text-muted mt-1" t-out="exception['error']"/>
+                                <div class="small mt-1 text-dark">Silakan hubungi customer service kami untuk informasi lebih lanjut.</div>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Exception banner -->
-                <div t-if="exception" class="alert alert-danger o_dtd_exception mt-3">
-                    <div class="d-flex align-items-start">
-                        <i class="fa fa-exclamation-triangle me-2 mt-1"/>
-                        <div>
-                            <b>Pengiriman mengalami kendala.</b>
-                            <div t-if="exception['desc']" class="small mt-1" t-out="exception['desc']"/>
-                            <div t-if="exception['error']" class="small text-muted mt-1" t-out="exception['error']"/>
-                            <div class="small mt-1">Silakan hubungi kami untuk informasi lebih lanjut.</div>
-                        </div>
+                    <!-- UNKNOWN STATUS BANNER -->
+                    <div t-if="unknown and not exception" class="alert alert-warning rounded-4 shadow-sm mb-3 py-2 px-3 small">
+                        <i class="fa fa-info-circle me-1"/> Status pengiriman sedang diperbarui dari pihak kurir. Silakan muat ulang beberapa saat lagi.
                     </div>
-                </div>
 
-                <!-- Unknown status banner -->
-                <div t-if="unknown and not exception" class="alert alert-warning o_dtd_unknown mt-3">
-                    <i class="fa fa-info-circle me-2"/>Status pengiriman belum dapat diperbarui saat ini. Silakan coba lagi beberapa saat.
-                </div>
+                    <!-- DASHBOARD CONTENT (2 Columns on Web, Stacked on Mobile) -->
+                    <div class="o_dtd_dashboard_grid">
 
-                <!-- Timeline / stepper -->
-                <div class="card bg-white mt-3">
-                    <div class="card-body">
-                        <div class="o_dtd_stepper" role="list">
-                            <t t-foreach="steps" t-as="step">
-                                <div t-attf-class="o_dtd_step {{step['reached'] and 'is-done' or ''}} {{step['current'] and 'is-current' or ''}} {{step_last and 'is-last' or ''}}"
-                                     role="listitem">
-                                    <div class="o_dtd_step_icon">
-                                        <i t-if="step['reached']" class="fa fa-check"/>
-                                        <i t-else="" class="fa fa-circle-o"/>
+                        <!-- LEFT COLUMN: Overview, Route & Stepper -->
+                        <div class="o_dtd_left_col">
+
+                            <!-- HERO SHIPMENT OVERVIEW CARD -->
+                            <div class="o_dtd_hero_card">
+                                <div class="o_dtd_hero_top">
+                                    <div>
+                                        <div class="text-muted small mb-1">Status Pengiriman</div>
+                                        <div t-attf-class="o_dtd_status_pill status-{{status or 'draft'}}">
+                                            <i t-if="status == 'delivered'" class="fa fa-check-circle"/>
+                                            <i t-elif="status in ('shipped', 'in_transit')" class="fa fa-truck"/>
+                                            <i t-elif="status == 'exception'" class="fa fa-exclamation-circle"/>
+                                            <i t-else="" class="fa fa-clock-o"/>
+                                            <span t-out="current_status['label']"/>
+                                        </div>
                                     </div>
-                                    <div class="o_dtd_step_body">
-                                        <div class="o_dtd_step_label" t-out="step['label']"/>
-                                        <div class="o_dtd_step_ts" t-if="step['ts_display']" t-out="step['ts_display']"/>
+                                    <div class="text-end">
+                                        <div class="text-muted small mb-1">Estimasi Tiba (ETA)</div>
+                                        <div class="o_dtd_eta_text fw-bold">
+                                            <i class="fa fa-calendar-check-o text-primary"/>
+                                            <span t-out="eta_display or 'Sedang Diproses'"/>
+                                        </div>
                                     </div>
                                 </div>
-                            </t>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Current status + collapsible history -->
-                <div class="card bg-white mt-3">
-                    <div class="card-body">
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <h6 class="o_dtd_section_title">Status Terkini</h6>
-                                <div class="o_dtd_current_status">
-                                    <b t-out="current_status['label']"/>
-                                    <div t-if="current_status['desc']" class="small mt-1" t-out="current_status['desc']"/>
-                                    <div t-if="last_check_display" class="small text-muted mt-1">
-                                        <i class="fa fa-clock-o me-1"/>Diperbarui
-                                        <t t-out="last_check_display"/>
+                                <div class="o_dtd_hero_grid">
+                                    <!-- No. Resi -->
+                                    <div class="o_dtd_meta_box">
+                                        <div class="o_dtd_meta_lbl">Nomor Resi Pengiriman</div>
+                                        <div class="o_dtd_resi_wrap">
+                                            <span class="o_dtd_resi_num" id="dtd_resi_text" t-out="resi or 'Belum tersedia'"/>
+                                            <button t-if="resi" type="button" class="o_dtd_btn_copy" id="dtd_copy_btn" onclick="dtdCopyResi(this, 'dtd_resi_text')">
+                                                <i class="fa fa-copy"/> <span class="copy-lbl">Salin</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Ekspedisi -->
+                                    <div class="o_dtd_meta_box">
+                                        <div class="o_dtd_meta_lbl">Ekspedisi / Kurir</div>
+                                        <div class="o_dtd_meta_val">
+                                            <i class="fa fa-cube text-muted me-1"/>
+                                            <t t-out="courier_name"/>
+                                        </div>
+                                    </div>
+
+                                    <!-- Penerima -->
+                                    <div class="o_dtd_meta_box">
+                                        <div class="o_dtd_meta_lbl">Penerima</div>
+                                        <div class="o_dtd_meta_val text-truncate">
+                                            <t t-out="dest_info['name']"/>
+                                        </div>
+                                    </div>
+
+                                    <!-- Terakhir Diperbarui -->
+                                    <div class="o_dtd_meta_box">
+                                        <div class="o_dtd_meta_lbl">Terakhir Diperbarui</div>
+                                        <div class="small text-muted">
+                                            <t t-out="last_check_display or 'Baru saja'"/>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <h6 class="o_dtd_section_title">Riwayat</h6>
-                                <details class="o_dtd_history">
-                                    <summary class="btn btn-sm btn-light">Lihat Riwayat Status</summary>
-                                    <div class="mt-2">
-                                        <t t-foreach="history" t-as="h">
-                                            <div class="o_dtd_history_item">
-                                                <div class="o_dtd_hist_row">
-                                                    <span class="o_dtd_hist_ts" t-out="h['ts_display'] or '—'"/>
-                                                    <b class="ms-2" t-out="h['status_label']"/>
+
+                            <!-- ROUTE ORIGIN & DESTINATION CARD (Biteship Style) -->
+                            <div class="o_dtd_route_card">
+                                <div class="o_dtd_route_flow">
+                                    <!-- Asal -->
+                                    <div class="o_dtd_route_point">
+                                        <div class="o_dtd_point_icon is-origin">
+                                            <i class="fa fa-building-o"/>
+                                        </div>
+                                        <div class="o_dtd_point_body">
+                                            <span class="o_dtd_point_role">Asal (Pengirim)</span>
+                                            <span class="o_dtd_point_name" t-out="origin_info['name']"/>
+                                            <span class="o_dtd_point_loc" t-out="origin_info['city']"/>
+                                        </div>
+                                    </div>
+
+                                    <!-- Arrow / Truck -->
+                                    <div class="o_dtd_route_line">
+                                        <div class="o_dtd_truck_badge">
+                                            <i class="fa fa-truck"/>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tujuan -->
+                                    <div class="o_dtd_route_point">
+                                        <div class="o_dtd_point_icon is-dest">
+                                            <i class="fa fa-map-marker"/>
+                                        </div>
+                                        <div class="o_dtd_point_body">
+                                            <span class="o_dtd_point_role">Tujuan (Penerima)</span>
+                                            <span class="o_dtd_point_name" t-out="dest_info['name']"/>
+                                            <span class="o_dtd_point_loc" t-out="dest_info['location']"/>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- MILESTONE STEPPER PROGRESS BAR -->
+                            <div class="o_dtd_stepper_card">
+                                <div class="o_dtd_meta_lbl mb-2">Tahapan Pengiriman</div>
+                                <div class="o_dtd_stepper" role="list">
+                                    <t t-foreach="steps" t-as="step">
+                                        <div t-attf-class="o_dtd_step {{step['reached'] and 'is-done' or ''}} {{step['current'] and 'is-current' or ''}} {{step_last and 'is-last' or ''}}"
+                                             role="listitem">
+                                            <div class="o_dtd_step_icon">
+                                                <i t-if="step['reached']" class="fa fa-check"/>
+                                                <i t-else="" class="fa fa-circle-o"/>
+                                            </div>
+                                            <div class="o_dtd_step_label" t-out="step['label']"/>
+                                            <div class="o_dtd_step_ts" t-if="step['ts_display']" t-out="step['ts_display']"/>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- RIGHT COLUMN: Detail Progress Tracking (Vertical Journey - Biteship Style) -->
+                        <div class="o_dtd_right_col">
+                            <div class="o_dtd_journey_card">
+                                <div class="o_dtd_journey_header">
+                                    <div class="o_dtd_journey_title">
+                                        <i class="fa fa-map-signs text-primary"/>
+                                        <span>Detail Perjalanan Paket</span>
+                                    </div>
+                                    <div class="o_dtd_live_pill">
+                                        <span class="o_dtd_live_dot"/>
+                                        <span>Live Tracking</span>
+                                    </div>
+                                </div>
+
+                                <!-- Live Checkpoint Vertical Timeline -->
+                                <div class="o_dtd_timeline">
+                                    <t t-foreach="detailed_progress" t-as="event">
+                                        <div t-attf-class="o_dtd_event_item {{event['is_latest'] and 'is-latest' or ''}}">
+                                            <div class="o_dtd_event_node"/>
+                                            <div class="o_dtd_event_content">
+                                                <div class="o_dtd_event_top">
+                                                    <span class="o_dtd_event_title" t-out="event['title']"/>
+                                                    <span class="o_dtd_event_time">
+                                                        <i class="fa fa-clock-o me-1"/>
+                                                        <t t-out="event['time_display'] or event['ts_display']"/>
+                                                        <span t-if="event['date_display']" class="text-muted ms-1">• <t t-out="event['date_display']"/></span>
+                                                    </span>
                                                 </div>
-                                                <div t-if="h['desc']" class="o_dtd_hist_desc small" t-out="h['desc']"/>
-                                                <div t-if="h['location']" class="o_dtd_hist_loc small text-muted">
-                                                    <i class="fa fa-map-marker me-1"/><t t-out="h['location']"/>
+                                                <div class="o_dtd_event_desc" t-out="event['desc']"/>
+                                                <div class="o_dtd_event_tags">
+                                                    <span t-if="event['location']" class="o_dtd_tag">
+                                                        <i class="fa fa-map-marker text-danger"/>
+                                                        <t t-out="event['location']"/>
+                                                    </span>
+                                                    <span class="o_dtd_tag">
+                                                        <i class="fa fa-truck text-muted"/>
+                                                        <t t-out="event['courier_name']"/>
+                                                    </span>
                                                 </div>
                                             </div>
-                                        </t>
-                                        <p t-if="not history" class="text-muted small mb-0">Belum ada riwayat status.</p>
-                                    </div>
-                                </details>
+                                        </div>
+                                    </t>
+                                </div>
+
                             </div>
                         </div>
+
                     </div>
+
+                    <!-- FOOTER ACTIONS -->
+                    <div class="mt-3 text-center" t-if="not is_public">
+                        <a href="/my/orders" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-arrow-left me-1"/> Kembali ke Daftar Pesanan
+                        </a>
+                    </div>
+
                 </div>
 
-                <div t-if="not is_public">
-                    <a href="/my/orders" class="btn btn-secondary o_dtd_back">
-                        <i class="fa fa-arrow-left me-1"/>Kembali ke Pesanan Saya
-                    </a>
-                </div>
             </div>
+
+            <!-- INLINE JAVASCRIPT FOR VIEW SWITCHING & CLIPBOARD COPY -->
+            <script type="text/javascript">
+                function dtdSetViewMode(mode) {
+                    var wrap = document.getElementById('dtd_layout_wrap');
+                    var btnWeb = document.getElementById('btn_dtd_web');
+                    var btnMobile = document.getElementById('btn_dtd_mobile');
+                    if (!wrap) return;
+
+                    if (mode === 'mobile') {
+                        wrap.classList.add('mode-mobile-sim');
+                        wrap.classList.remove('mode-web');
+                        if (btnMobile) btnMobile.classList.add('is-active');
+                        if (btnWeb) btnWeb.classList.remove('is-active');
+                    } else {
+                        wrap.classList.remove('mode-mobile-sim');
+                        wrap.classList.add('mode-web');
+                        if (btnWeb) btnWeb.classList.add('is-active');
+                        if (btnMobile) btnMobile.classList.remove('is-active');
+                    }
+                }
+
+                function dtdCopyResi(btn, elementId) {
+                    var el = document.getElementById(elementId);
+                    if (!el) return;
+                    var text = el.innerText.trim();
+                    if (!text || text === 'Belum tersedia') return;
+
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(text).then(function() {
+                            dtdShowCopiedFeedback(btn);
+                        });
+                    } else {
+                        var temp = document.createElement('textarea');
+                        temp.value = text;
+                        document.body.appendChild(temp);
+                        temp.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(temp);
+                        dtdShowCopiedFeedback(btn);
+                    }
+                }
+
+                function dtdShowCopiedFeedback(btn) {
+                    var lbl = btn.querySelector('.copy-lbl');
+                    if (!lbl) return;
+                    var orig = lbl.innerText;
+                    lbl.innerText = 'Tersalin! ✓';
+                    btn.classList.add('copied');
+                    setTimeout(function() {
+                        lbl.innerText = orig;
+                        btn.classList.remove('copied');
+                    }, 2000);
+                }
+            </script>
         </t>
     </template>
 

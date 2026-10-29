@@ -1,29 +1,434 @@
-// Delivery Tracking Portal - customer-facing stepper/timeline.
-// Scoped under .o_dtd_* so it never collides with the default portal theme.
+// Delivery Tracking Portal - Customer-facing Tracking Experience (Biteship Style)
+// Supports two view versions: Web (Desktop) and Mobile (Smartphone).
 
 .o_dtd_page {
-    max-width: 100%;
+    width: 100%;
+    background-color: #f8fafc;
+    min-height: 80vh;
+    padding: 12px 0 40px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
 }
 
-.o_dtd_meta_label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #8a92a3;
-    margin-bottom: 2px;
+// Hide portal breadcrumbs on public view for a clean branded app look
+.o_dtd_public_view .o_portal_breadcrumbs,
+.o_dtd_public_view .o_portal_my_doc_equals {
+    display: none !important;
 }
 
-.o_dtd_section_title {
+/* ---------------- View Mode Switcher Header ---------------- */
+
+.o_dtd_view_header {
+    max-width: 1040px;
+    margin: 0 auto 16px;
+    padding: 0 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.o_dtd_mode_switcher {
+    display: inline-flex;
+    background: #e2e8f0;
+    padding: 3px;
+    border-radius: 9999px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.o_dtd_mode_btn {
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 12px;
     font-weight: 600;
-    color: #6c757d;
+    padding: 6px 14px;
+    border-radius: 9999px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
 }
 
-/* ---------------- Stepper ---------------- */
+.o_dtd_mode_btn:hover {
+    color: #0f172a;
+}
+
+.o_dtd_mode_btn.is-active {
+    background: #0284c7;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);
+}
+
+/* ---------------- Layout Wrapper (Web vs Mobile Frame) ---------------- */
+
+.o_dtd_layout_wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mobile Simulation Mode (Desktop previewing mobile device) */
+.o_dtd_layout_wrap.mode-mobile-sim {
+    max-width: 420px !important;
+    margin: 10px auto 30px !important;
+    border: 10px solid #1e293b;
+    border-radius: 40px;
+    box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.4);
+    background: #f8fafc;
+    overflow: hidden;
+    position: relative;
+    padding-bottom: 24px;
+}
+
+.o_dtd_layout_wrap.mode-mobile-sim::before {
+    content: "";
+    display: block;
+    width: 120px;
+    height: 18px;
+    background: #1e293b;
+    border-radius: 0 0 14px 14px;
+    margin: -10px auto 14px;
+}
+
+/* ---------------- Brand Header ---------------- */
+
+.o_dtd_brand_card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 18px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+.o_dtd_brand_title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.o_dtd_order_badge {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+/* ---------------- Multi-Courier Tabs (Carrier 1 / Carrier 2) ---------------- */
+
+.o_dtd_courier_segmented {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.o_dtd_courier_seg_item {
+    flex: 1 1 0;
+    min-width: 160px;
+    background: #ffffff;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px 14px;
+    text-decoration: none;
+    color: #475569;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    transition: all 0.2s ease;
+}
+
+.o_dtd_courier_seg_item:hover {
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+
+.o_dtd_courier_seg_item.is-active {
+    background: #f0f9ff;
+    border-color: #0284c7;
+    color: #0369a1;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.15);
+}
+
+.o_dtd_seg_tag {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #0284c7;
+}
+
+.o_dtd_seg_name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.o_dtd_seg_resi {
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #64748b;
+}
+
+/* ---------------- Hero Shipment Card ---------------- */
+
+.o_dtd_hero_card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 22px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.o_dtd_hero_top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+}
+
+.o_dtd_status_pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.o_dtd_status_pill.status-draft,
+.o_dtd_status_pill.status-in_progress {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.o_dtd_status_pill.status-shipped,
+.o_dtd_status_pill.status-in_transit {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.o_dtd_status_pill.status-delivered {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.o_dtd_status_pill.status-exception {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.o_dtd_status_pill.status-unknown {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.o_dtd_eta_text {
+    font-size: 13px;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.o_dtd_hero_grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.o_dtd_meta_box {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.o_dtd_meta_lbl {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+}
+
+.o_dtd_resi_wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.o_dtd_resi_num {
+    font-size: 16px;
+    font-weight: 800;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+}
+
+.o_dtd_btn_copy {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #0369a1;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.o_dtd_btn_copy:hover {
+    background: #e2e8f0;
+    color: #0284c7;
+}
+
+.o_dtd_btn_copy.copied {
+    background: #10b981 !important;
+    border-color: #10b981 !important;
+    color: #ffffff !important;
+}
+
+.o_dtd_meta_val {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+/* ---------------- Route Section (Origin & Destination - Biteship Style) ---------------- */
+
+.o_dtd_route_card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 18px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.o_dtd_route_flow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    position: relative;
+}
+
+.o_dtd_route_point {
+    flex: 1 1 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.o_dtd_point_icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.o_dtd_point_icon.is-origin {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
+.o_dtd_point_icon.is-dest {
+    background: #fef2f2;
+    color: #ef4444;
+}
+
+.o_dtd_point_body {
+    display: flex;
+    flex-direction: column;
+}
+
+.o_dtd_point_role {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+}
+
+.o_dtd_point_name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.o_dtd_point_loc {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.o_dtd_route_line {
+    flex: 0 0 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.o_dtd_route_line::before {
+    content: "";
+    width: 100%;
+    height: 2px;
+    border-top: 2px dashed #cbd5e1;
+    position: absolute;
+    top: 50%;
+    z-index: 1;
+}
+
+.o_dtd_truck_badge {
+    position: relative;
+    z-index: 2;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0284c7;
+    font-size: 12px;
+}
+
+/* ---------------- Stepper Progress Bar ---------------- */
+
+.o_dtd_stepper_card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
 
 .o_dtd_stepper {
     display: flex;
     align-items: flex-start;
-    padding: 4px 0;
+    padding: 6px 0;
 }
 
 .o_dtd_step {
@@ -31,122 +436,343 @@
     flex: 1 1 0;
     min-width: 0;
     text-align: center;
-    padding: 4px 4px 0;
+    padding: 0 4px;
 }
 
-/* Connector line between icons; hidden on the last step. */
 .o_dtd_step:not(.is-last)::after {
     content: "";
     position: absolute;
-    top: 24px;
-    left: calc(50% + 23px);
-    width: calc(100% - 46px);
+    top: 21px;
+    left: calc(50% + 21px);
+    width: calc(100% - 42px);
     height: 3px;
     border-radius: 2px;
-    background: #dfe3ea;
+    background: #e2e8f0;
     z-index: 0;
 }
+
 .o_dtd_step.is-done:not(.is-last)::after {
-    background: #3bb15d;
+    background: #10b981;
 }
 
 .o_dtd_step_icon {
     position: relative;
     z-index: 1;
-    width: 46px;
-    height: 46px;
+    width: 42px;
+    height: 42px;
     margin: 0 auto;
     border-radius: 50%;
-    background: #fff;
-    border: 2px solid #dfe3ea;
-    color: #9aa0ae;
+    background: #ffffff;
+    border: 2px solid #cbd5e1;
+    color: #94a3b8;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: 15px;
+    transition: all 0.3s ease;
 }
+
 .o_dtd_step.is-done .o_dtd_step_icon {
-    background: #3bb15d;
-    border-color: #3bb15d;
-    color: #fff;
+    background: #10b981;
+    border-color: #10b981;
+    color: #ffffff;
 }
+
 .o_dtd_step.is-current .o_dtd_step_icon {
-    border-color: #0086b3;
-    background: #fff;
-    color: #0086b3;
-    animation: o_dtd_pulse 1.8s ease-out infinite;
+    border-color: #0284c7;
+    background: #ffffff;
+    color: #0284c7;
+    box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.2);
+    animation: o_dtd_pulse 2s infinite;
 }
+
 .o_dtd_step_label {
     margin-top: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #6c757d;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
 }
+
 .o_dtd_step.is-done .o_dtd_step_label,
 .o_dtd_step.is-current .o_dtd_step_label {
-    color: #212529;
+    color: #0f172a;
 }
+
 .o_dtd_step_ts {
     font-size: 11px;
-    color: #9aa0ae;
+    color: #94a3b8;
     margin-top: 2px;
 }
 
-@keyframes o_dtd_pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(0, 134, 179, 0.45); }
-    70%  { box-shadow: 0 0 0 12px rgba(0, 134, 179, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(0, 134, 179, 0); }
+/* ---------------- Detail Progress Tracking (Vertical Timeline - Biteship Style) ---------------- */
+
+.o_dtd_journey_card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 22px 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
-/* ---------------- History ---------------- */
+.o_dtd_journey_header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 14px;
+    margin-bottom: 20px;
+}
 
-.o_dtd_history_item {
-    padding: 8px 0;
-    border-top: 1px dashed #e9ecef;
+.o_dtd_journey_title {
+    font-size: 16px;
+    font-weight: 800;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
-.o_dtd_history_item:first-of-type {
-    border-top: 0;
-    padding-top: 4px;
+
+.o_dtd_live_pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #15803d;
+    background: #dcfce7;
+    padding: 3px 10px;
+    border-radius: 9999px;
 }
-.o_dtd_hist_ts {
-    font-size: 12px;
-    color: #6c757d;
+
+.o_dtd_live_dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #16a34a;
+    animation: o_dtd_pulse 1.5s infinite;
+}
+
+.o_dtd_timeline {
+    position: relative;
+    padding-left: 28px;
+}
+
+.o_dtd_timeline::before {
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 10px;
+    bottom: 20px;
+    width: 2px;
+    background: #e2e8f0;
+}
+
+.o_dtd_event_item {
+    position: relative;
+    padding-bottom: 24px;
+}
+
+.o_dtd_event_item:last-child {
+    padding-bottom: 4px;
+}
+
+.o_dtd_event_node {
+    position: absolute;
+    left: -28px;
+    top: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 3px solid #cbd5e1;
+    transition: all 0.3s ease;
+}
+
+.o_dtd_event_item.is-latest .o_dtd_event_node {
+    border-color: #0284c7;
+    background: #0284c7;
+    box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.25);
+    animation: o_dtd_pulse 1.8s infinite;
+}
+
+.o_dtd_event_content {
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    border-radius: 12px;
+    padding: 12px 16px;
+    transition: all 0.2s ease;
+}
+
+.o_dtd_event_item.is-latest .o_dtd_event_content {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+}
+
+.o_dtd_event_top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.o_dtd_event_title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+}
+
+.o_dtd_event_item.is-latest .o_dtd_event_title {
+    color: #0369a1;
+}
+
+.o_dtd_event_time {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 6px;
     white-space: nowrap;
 }
 
-/* ---------------- Responsive: vertical stepper ---------------- */
+.o_dtd_event_desc {
+    font-size: 13px;
+    color: #334155;
+    margin-bottom: 6px;
+    line-height: 1.45;
+}
 
-@media (max-width: 620px) {
-    .o_dtd_stepper {
+.o_dtd_event_tags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.o_dtd_tag {
+    font-size: 11px;
+    color: #64748b;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ---------------- Desktop 2-Column Grid Layout ---------------- */
+
+@media (min-width: 992px) {
+    .o_dtd_layout_wrap.mode-web .o_dtd_dashboard_grid {
+        display: grid;
+        grid-template-columns: 4.8fr 7.2fr;
+        gap: 20px;
+        align-items: start;
+    }
+}
+
+/* ---------------- Mobile Responsive Adaptations ---------------- */
+
+@media (max-width: 768px) {
+    .o_dtd_page {
+        padding: 8px 4px 30px;
+    }
+
+    .o_dtd_view_header {
+        padding: 0 4px;
+        margin-bottom: 12px;
+    }
+
+    .o_dtd_hero_card,
+    .o_dtd_route_card,
+    .o_dtd_stepper_card,
+    .o_dtd_journey_card,
+    .o_dtd_brand_card {
+        padding: 14px 16px;
+        border-radius: 14px;
+        margin-bottom: 12px;
+    }
+
+    .o_dtd_route_flow {
         flex-direction: column;
-    }
-    .o_dtd_step {
-        display: flex;
-        align-items: flex-start;
-        text-align: left;
+        align-items: stretch;
         gap: 12px;
-        padding: 0 0 24px 0;
     }
+
+    .o_dtd_route_line {
+        flex: none;
+        height: 20px;
+        flex-direction: row;
+    }
+
+    .o_dtd_route_line::before {
+        width: 2px;
+        height: 100%;
+        border-top: none;
+        border-left: 2px dashed #cbd5e1;
+        left: 17px;
+        top: 0;
+    }
+
+    .o_dtd_truck_badge {
+        display: none;
+    }
+
+    .o_dtd_stepper {
+        overflow-x: auto;
+        padding-bottom: 10px;
+        justify-content: flex-start;
+    }
+
+    .o_dtd_step {
+        flex: 0 0 74px;
+    }
+
     .o_dtd_step:not(.is-last)::after {
-        top: 44px;
-        left: 21px;
-        width: 3px;
-        height: calc(100% - 20px);
-        background: #dfe3ea;
+        top: 18px;
+        left: calc(50% + 18px);
+        width: calc(100% - 36px);
     }
-    .o_dtd_step.is-done:not(.is-last)::after {
-        background: #3bb15d;
-    }
+
     .o_dtd_step_icon {
-        margin: 0;
-        flex: 0 0 42px;
-        width: 42px;
-        height: 42px;
+        width: 36px;
+        height: 36px;
+        font-size: 13px;
     }
-    .o_dtd_step_body {
-        padding-top: 3px;
-    }
+
     .o_dtd_step_label {
-        margin-top: 0;
+        font-size: 10.5px;
     }
+
+    .o_dtd_timeline {
+        padding-left: 22px;
+    }
+
+    .o_dtd_timeline::before {
+        left: 6px;
+    }
+
+    .o_dtd_event_node {
+        left: -22px;
+        width: 14px;
+        height: 14px;
+    }
+
+    .o_dtd_event_content {
+        padding: 10px 12px;
+    }
+}
+
+@keyframes o_dtd_pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.45); }
+    70%  { box-shadow: 0 0 0 10px rgba(2, 132, 199, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
 }

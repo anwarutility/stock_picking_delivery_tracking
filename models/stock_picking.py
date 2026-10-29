@@ -244,14 +244,29 @@ class StockPicking(models.Model):
             return fields.Datetime.to_string(value)
 
     def _format_tracking_date(self, value):
-        """Format a naive-UTC datetime for the portal (date only)."""
+        """Format a naive-UTC datetime for the portal (date only, e.g. 29 Okt 2026)."""
         if not value:
             return False
         try:
             localized = fields.Datetime.context_timestamp(self, value)
-            return localized.strftime("%d/%m/%Y")
+            months = [
+                "", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+                "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
+            ]
+            m = months[localized.month] if 1 <= localized.month <= 12 else str(localized.month)
+            return localized.strftime(f"%d {m} %Y")
         except Exception:
             return fields.Datetime.to_string(value)
+
+    def _format_tracking_time(self, value):
+        """Format a naive-UTC datetime for the portal (time only, e.g. 10:15 WIB)."""
+        if not value:
+            return False
+        try:
+            localized = fields.Datetime.context_timestamp(self, value)
+            return localized.strftime("%H:%M") + " WIB"
+        except Exception:
+            return False
 
     def _tracking_status_display_label(self, status):
         return DELIVERY_TRACKING_STATUS_LABELS.get(status, status or "")
@@ -433,6 +448,150 @@ class StockPicking(models.Model):
                 "error": status_error,
             }
 
+        # Origin and Destination details (Biteship style)
+        wh = self.picking_type_id.warehouse_id
+        origin_city = (wh and wh.partner_id and wh.partner_id.city) or self.company_id.city or "Jakarta"
+        origin_info = {
+            "name": self.company_id.name or "PT Aston Graphindo Indonesia",
+            "city": origin_city,
+        }
+
+        partner = self.partner_id
+        dest_loc = ", ".join(filter(None, [partner.city, partner.state_id.name])) or (partner.country_id and partner.country_id.name) or "Indonesia"
+        dest_info = {
+            "name": partner.name or "-",
+            "city": partner.city or "",
+            "location": dest_loc,
+        }
+
+        # Multi-carrier segmented tabs info
+        courier_tabs = []
+        if self.carrier_id or self.carrier_tracking_ref:
+            courier_tabs.append({
+                "carrier_num": 1,
+                "label": "Kurir 1",
+                "name": self.carrier_id.name or "Kurir 1",
+                "resi": self.carrier_tracking_ref or "",
+                "url": self.delivery_tracking_url,
+                "is_active": (carrier_num == 1),
+            })
+        if self.carrier_id_2 or self.carrier_tracking_ref_2:
+            courier_tabs.append({
+                "carrier_num": 2,
+                "label": "Kurir 2",
+                "name": self.carrier_id_2.name or "Kurir 2",
+                "resi": self.carrier_tracking_ref_2 or "",
+                "url": self.delivery_tracking_url_2,
+                "is_active": (carrier_num == 2),
+            })
+
+        # Build Detailed Progress Events (Biteship Live Journey timeline - reverse chronological)
+        carrier_logs = self.tracking_log_ids.filtered(
+            lambda l: not l.carrier_id or l.carrier_id == carrier_obj
+        ).sorted(key=lambda log: log.event_datetime or dt.min, reverse=True)
+
+        detailed_progress = []
+        if carrier_logs:
+            for idx, log in enumerate(carrier_logs):
+                detailed_progress.append({
+                    "title": self._tracking_status_display_label(log.status).upper(),
+                    "desc": log.status_desc or "",
+                    "location": log.location or "",
+                    "date_display": self._format_tracking_date(log.event_datetime),
+                    "time_display": self._format_tracking_time(log.event_datetime),
+                    "ts_display": self._format_tracking_datetime(log.event_datetime),
+                    "is_latest": (idx == 0),
+                    "status": log.status,
+                    "courier_name": log.carrier_id.name if log.carrier_id else courier_name,
+                })
+            # Add initial warehouse milestones at the base of the history
+            if resi:
+                detailed_progress.append({
+                    "title": "NOMOR RESI DITERBITKAN",
+                    "desc": "Nomor resi %s telah diterbitkan. Paket diserahkan ke kurir %s." % (resi, courier_name),
+                    "location": origin_city,
+                    "date_display": self._format_tracking_date(self.date_done or self.create_date),
+                    "time_display": self._format_tracking_time(self.date_done or self.create_date),
+                    "ts_display": self._format_tracking_datetime(self.date_done or self.create_date),
+                    "is_latest": False,
+                    "status": "shipped",
+                    "courier_name": courier_name,
+                })
+            detailed_progress.append({
+                "title": "ORDER DIBUAT",
+                "desc": "Dokumen pengiriman %s telah dibuat di sistem." % (self.name or ""),
+                "location": origin_city,
+                "date_display": self._format_tracking_date(self.create_date),
+                "time_display": self._format_tracking_time(self.create_date),
+                "ts_display": self._format_tracking_datetime(self.create_date),
+                "is_latest": False,
+                "status": "draft",
+                "courier_name": courier_name,
+            })
+        else:
+            # Belum ada log dari API kurir
+            if resi:
+                detailed_progress = [
+                    {
+                        "title": "RESI TELAH DITERBITKAN",
+                        "desc": "Nomor resi %s telah diterbitkan via %s. Menunggu pemindaian perjalanan pertama dari pihak kurir." % (resi, courier_name),
+                        "location": origin_city,
+                        "date_display": self._format_tracking_date(self.date_done or self.create_date),
+                        "time_display": self._format_tracking_time(self.date_done or self.create_date),
+                        "ts_display": self._format_tracking_datetime(self.date_done or self.create_date),
+                        "is_latest": True,
+                        "status": "shipped",
+                        "courier_name": courier_name,
+                    },
+                    {
+                        "title": "PESANAN SELESAI DIKEMAS",
+                        "desc": "Barang pesanan telah selesai dikemas di gudang dan siap diserahkan ke pihak kurir.",
+                        "location": origin_city,
+                        "date_display": self._format_tracking_date(self.date_done or self.date or self.create_date),
+                        "time_display": self._format_tracking_time(self.date_done or self.date or self.create_date),
+                        "ts_display": self._format_tracking_datetime(self.date_done or self.date or self.create_date),
+                        "is_latest": False,
+                        "status": "in_progress",
+                        "courier_name": courier_name,
+                    },
+                    {
+                        "title": "ORDER DIBUAT",
+                        "desc": "Dokumen pengiriman %s telah dibuat di sistem." % (self.name or ""),
+                        "location": origin_city,
+                        "date_display": self._format_tracking_date(self.create_date),
+                        "time_display": self._format_tracking_time(self.create_date),
+                        "ts_display": self._format_tracking_datetime(self.create_date),
+                        "is_latest": False,
+                        "status": "draft",
+                        "courier_name": courier_name,
+                    },
+                ]
+            else:
+                detailed_progress = [
+                    {
+                        "title": "PESANAN SEDANG DIPROSES",
+                        "desc": "Pesanan Anda sedang disiapkan dan dikemas oleh tim gudang kami.",
+                        "location": origin_city,
+                        "date_display": self._format_tracking_date(self.date or self.create_date),
+                        "time_display": self._format_tracking_time(self.date or self.create_date),
+                        "ts_display": self._format_tracking_datetime(self.date or self.create_date),
+                        "is_latest": True,
+                        "status": "draft",
+                        "courier_name": courier_name,
+                    },
+                    {
+                        "title": "ORDER DIBUAT",
+                        "desc": "Dokumen pengiriman %s telah dibuat di sistem." % (self.name or ""),
+                        "location": origin_city,
+                        "date_display": self._format_tracking_date(self.create_date),
+                        "time_display": self._format_tracking_time(self.create_date),
+                        "ts_display": self._format_tracking_datetime(self.create_date),
+                        "is_latest": False,
+                        "status": "draft",
+                        "courier_name": courier_name,
+                    },
+                ]
+
         history = [
             {
                 "status": log.status,
@@ -472,6 +631,10 @@ class StockPicking(models.Model):
             "unknown": status == "unknown",
             "tracking_url": tracking_url,
             "history": history,
+            "detailed_progress": detailed_progress,
+            "origin_info": origin_info,
+            "dest_info": dest_info,
+            "courier_tabs": courier_tabs,
             "is_public": False,
             "carrier_num": carrier_num,
             "carrier_label": carrier_label,
