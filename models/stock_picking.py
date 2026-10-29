@@ -179,14 +179,28 @@ class StockPicking(models.Model):
             )
         return providers[0]
 
+    def init(self):
+        super().init()
+        self.env.cr.execute(
+            """
+            UPDATE stock_picking
+            SET delivery_tracking_token = md5(random()::text || clock_timestamp()::text)
+            WHERE delivery_tracking_token IS NULL;
+
+            UPDATE stock_picking
+            SET delivery_tracking_token_2 = md5(random()::text || clock_timestamp()::text)
+            WHERE delivery_tracking_token_2 IS NULL;
+            """
+        )
+
     @api.depends("delivery_tracking_token")
     def _compute_delivery_tracking_url(self):
         """Public no-login tracking URL built from the secret token."""
         for picking in self:
             token = picking.delivery_tracking_token
             if not token:
-                picking.delivery_tracking_url = False
-                continue
+                token = uuid.uuid4().hex
+                picking.delivery_tracking_token = token
             base_url = picking.get_base_url()
             if base_url.startswith("http://") and "orimax.co.id" in base_url:
                 base_url = "https://" + base_url[len("http://") :]
@@ -198,8 +212,8 @@ class StockPicking(models.Model):
         for picking in self:
             token = picking.delivery_tracking_token_2
             if not token:
-                picking.delivery_tracking_url_2 = False
-                continue
+                token = uuid.uuid4().hex
+                picking.delivery_tracking_token_2 = token
             base_url = picking.get_base_url()
             if base_url.startswith("http://") and "orimax.co.id" in base_url:
                 base_url = "https://" + base_url[len("http://") :]
