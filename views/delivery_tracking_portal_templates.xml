@@ -37,25 +37,38 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="row g-2 mt-1 o_dtd_meta">
-                            <div class="col-6 col-md-3">
-                                <div class="o_dtd_meta_label">No. Resi</div>
-                                <b t-out="resi or 'Belum tersedia'"/>
+                        <!-- Courier & Resi Meta (Flexible: 1, 2, or more carriers) -->
+                        <t t-set="lines_to_render" t-value="tracking_lines or [{'resi': resi, 'courier_name': courier_name, 'eta_display': eta_display, 'status': status, 'current_status': current_status, 'tracking_url': False}]"/>
+                        <t t-foreach="lines_to_render" t-as="tl">
+                            <div t-attf-class="row g-2 mt-2 o_dtd_meta {{not tl_first and 'pt-2 border-top' or ''}}">
+                                <div class="col-6 col-md-3">
+                                    <div class="o_dtd_meta_label">
+                                        No. Resi <span t-if="len(lines_to_render) &gt; 1" class="badge text-bg-light border" t-out="'#%s' % (tl_index + 1)"/>
+                                    </div>
+                                    <b t-out="tl['resi'] or 'Belum tersedia'"/>
+                                    <div t-if="tl.get('tracking_url')" class="small mt-1">
+                                        <a t-att-href="tl['tracking_url']" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                            <i class="fa fa-external-link me-1"/>Lacak di Web Kurir
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="o_dtd_meta_label">
+                                        Kurir <span t-if="len(lines_to_render) &gt; 1" class="badge text-bg-light border" t-out="'#%s' % (tl_index + 1)"/>
+                                    </div>
+                                    <t t-out="tl['courier_name']"/>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="o_dtd_meta_label">Estimasi Tiba</div>
+                                    <t t-out="tl['eta_display'] or '—'"/>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="o_dtd_meta_label">Status</div>
+                                    <span t-attf-class="badge rounded-pill o_dtd_status_badge {{((tl['status'] == 'delivered' or tl['current_status']['label'] == 'Selesai') and 'text-bg-success') or ((tl['status'] == 'exception' or tl['current_status']['label'] == 'Kendala / Retur') and 'text-bg-danger') or ((tl['status'] in ('in_transit', 'shipped') or tl['current_status']['label'] in ('Dalam Perjalanan', 'Dikirim')) and 'text-bg-primary') or 'text-bg-secondary'}}"
+                                          t-out="tl['current_status']['label']"/>
+                                </div>
                             </div>
-                            <div class="col-6 col-md-3">
-                                <div class="o_dtd_meta_label">Kurir</div>
-                                <t t-out="courier_name"/>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="o_dtd_meta_label">Estimasi Tiba</div>
-                                <t t-out="eta_display or '—'"/>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="o_dtd_meta_label">Status</div>
-                                <span t-attf-class="badge rounded-pill o_dtd_status_badge {{(status == 'delivered' and 'text-bg-success') or (status == 'exception' and 'text-bg-danger') or (status in ('in_transit', 'shipped') and 'text-bg-primary') or 'text-bg-secondary'}}"
-                                      t-out="current_status['label']"/>
-                            </div>
-                        </div>
+                        </t>
                     </div>
                 </div>
 
@@ -122,6 +135,7 @@
                                             <div class="o_dtd_history_item">
                                                 <div class="o_dtd_hist_row">
                                                     <span class="o_dtd_hist_ts" t-out="h['ts_display'] or '—'"/>
+                                                    <span t-if="h.get('courier_name')" class="badge text-bg-light border ms-1" t-out="h['courier_name']"/>
                                                     <b class="ms-2" t-out="h['status_label']"/>
                                                 </div>
                                                 <div t-if="h['desc']" class="o_dtd_hist_desc small" t-out="h['desc']"/>
@@ -161,7 +175,7 @@
             <xpath expr="//tr/td[last()]" position="after">
                 <td class="text-end">
                     <t t-set="picking_order_track"
-                       t-value="request.env['stock.picking'].sudo().search([('sale_id', '=', order.id), ('picking_type_code', '=', 'outgoing'), ('carrier_tracking_ref', '!=', False)], limit=1)"/>
+                       t-value="request.env['stock.picking'].sudo().search([('sale_id', '=', order.id), ('picking_type_code', '=', 'outgoing'), '|', ('carrier_tracking_ref', '!=', False), ('carrier_tracking_line_ids', '!=', False)], limit=1)"/>
                     <a t-if="picking_order_track"
                        t-att-href="'/my/orders/%s/tracking' % order.id">Lihat</a>
                     <span t-else="" class="text-muted">—</span>

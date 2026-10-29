@@ -1,5 +1,32 @@
 # Changelog - Stock Picking Delivery Tracking
 
+## v16.0.1.6.0 — 2026-10-29: Multi-Carrier & Multi-Tracking Reference (Opsi B)
+
+### Fitur
+Mendukung input lebih dari satu kurir dan nomor resi secara fleksibel (multi-carrier / pengiriman bertahap) pada Delivery Order serta menampilkan seluruh kurir & resi tersebut di halaman tracking publik / portal.
+
+#### 1. Backend Form (Tab Additional Info)
+- Model baru `stock.picking.tracking.line` (`carrier_tracking_line_ids` One2many di `stock.picking`).
+- Tabel dinamis di tab Additional Info untuk memasukkan daftar Kurir, No. Resi, status per baris, dan estimasi tiba.
+- Dukungan input 2 kurir (atau lebih) secara fleksibel.
+- Sinkronisasi otomatis dua arah antara baris pertama dan field `carrier_id` / `carrier_tracking_ref` bawaan Odoo agar laporan Surat Jalan / Delivery Slip dan modul lain tetap kompatibel.
+- Tetap dapat diedit saat status picking `done`.
+
+#### 2. Portal & Public Tracking Page (`/tracking/<token>` & `/my/orders/<id>/tracking`)
+- Format tampilan metadata kurir dan resi di card atas ditampilkan rapi untuk tiap kurir (Resi, Kurir, Estimasi Tiba, Status badge).
+- Jika terdapat lebih dari 1 kurir, resi dan kurir ditandai label nomor (#1, #2, dst.) dan tombol link direct ke web kurir bila tersedia.
+- Riwayat status (History) menampilkan label badge nama kurir per item log.
+
+#### 3. API Tracking & Polling
+- `_track_single` mengiterasi setiap baris kurir yang memiliki resi & mapping Biteship.
+- Menghitung agregasi status keseluruhan DO secara otomatis (misal satu kurir delivered dan satu in_transit -> status DO in_transit; keduanya delivered -> delivered).
+- Notifikasi Telegram ke salesperson merinci informasi seluruh kurir dan resi yang diinputkan.
+
+#### 4. Migrasi (`migrations/16.0.1.6.0/post-migrate.py`)
+- Auto-backfill baris `stock_picking_tracking_line` untuk DO lama yang sudah memiliki `carrier_id` dan `carrier_tracking_ref`.
+
+---
+
 ## v16.0.1.5.0 — 2026-09-15: Customer Tracking Portal
 
 ### Fitur

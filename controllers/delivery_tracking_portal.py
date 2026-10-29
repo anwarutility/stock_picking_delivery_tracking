@@ -20,12 +20,14 @@ class DeliveryTrackingPortal(CustomerPortal):
     """
 
     def _get_order_picking(self, order_id):
-        """First outgoing picking (with a resi) linked to the sale order."""
+        """First outgoing picking (with a resi or tracking lines) linked to the sale order."""
         return request.env["stock.picking"].sudo().search(
             [
                 ("sale_id", "=", order_id),
                 ("picking_type_code", "=", "outgoing"),
+                "|",
                 ("carrier_tracking_ref", "!=", False),
+                ("carrier_tracking_line_ids", "!=", False),
             ],
             limit=1,
         )

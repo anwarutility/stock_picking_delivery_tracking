@@ -39,6 +39,31 @@
                        attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"/>
             </xpath>
 
+            <!-- Multi-carrier & tracking lines table -->
+            <xpath expr="//group[@name='carrier_data']" position="after">
+                <group string="Daftar Kurir &amp; Nomor Resi Pengiriman" name="group_carrier_tracking_lines" colspan="2"
+                       attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}">
+                    <field name="carrier_tracking_line_ids" nolabel="1"
+                           attrs="{'readonly': [('state', '=', 'cancel')]}">
+                        <tree editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="carrier_id" required="1" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="carrier_tracking_ref" required="1"/>
+                            <field name="delivery_tracking_status" widget="badge" readonly="1"
+                                   decoration-success="delivery_tracking_status == 'delivered'"
+                                   decoration-warning="delivery_tracking_status == 'in_transit'"
+                                   decoration-danger="delivery_tracking_status == 'exception'"
+                                   decoration-info="delivery_tracking_status in ('shipped', 'unknown')"
+                                   decoration-muted="delivery_tracking_status == 'draft'"/>
+                            <field name="delivery_tracking_status_desc" readonly="1"/>
+                            <field name="delivery_estimated_date" readonly="1" optional="show"/>
+                            <field name="delivery_last_check" readonly="1" optional="hide"/>
+                            <field name="tracking_url" widget="url" string="Link Lacak" readonly="1" optional="show"/>
+                        </tree>
+                    </field>
+                </group>
+            </xpath>
+
             <!-- "Cek Status Pengiriman" button in the header -->
             <xpath expr="/form/header/button[last()]" position="after">
                 <button name="action_check_delivery_status" type="object"
@@ -61,6 +86,7 @@
                       attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}">
                     <field name="tracking_log_ids" readonly="1">
                         <tree editable="bottom">
+                            <field name="carrier_id" string="Kurir" optional="show"/>
                             <field name="status" string="Status" widget="badge"
                                    decoration-success="status == 'delivered'"
                                    decoration-warning="status == 'in_transit'"

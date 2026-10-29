@@ -14,6 +14,17 @@ class DeliveryTrackingLog(models.Model):
         string="Delivery Order",
         required=True,
         ondelete="cascade",
+        index=True,
+    )
+    tracking_line_id = fields.Many2one(
+        "stock.picking.tracking.line",
+        string="Tracking Line",
+        ondelete="cascade",
+        index=True,
+    )
+    carrier_id = fields.Many2one(
+        "delivery.carrier",
+        string="Kurir",
     )
     status = fields.Selection(
         [
