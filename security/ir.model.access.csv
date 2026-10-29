@@ -4,5 +4,3 @@ access_delivery_tracking_log_manager,delivery.tracking.log.manager,model_deliver
 access_delivery_tracking_provider_user,delivery.tracking.provider.user,model_delivery_tracking_provider,stock.group_stock_user,1,0,0,0
 access_delivery_tracking_provider_manager,delivery.tracking.provider.manager,model_delivery_tracking_provider,stock.group_stock_manager,1,1,1,1
 access_delivery_tracking_provider_system,delivery.tracking.provider.system,model_delivery_tracking_provider,base.group_system,1,1,1,1
-access_stock_picking_tracking_line_user,stock.picking.tracking.line.user,model_stock_picking_tracking_line,stock.group_stock_user,1,1,1,1
-access_stock_picking_tracking_line_manager,stock.picking.tracking.line.manager,model_stock_picking_tracking_line,stock.group_stock_manager,1,1,1,1

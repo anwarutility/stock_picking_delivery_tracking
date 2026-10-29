@@ -1,29 +1,34 @@
 # Changelog - Stock Picking Delivery Tracking
 
-## v16.0.1.6.0 — 2026-10-29: Multi-Carrier & Multi-Tracking Reference (Opsi B)
+## v16.0.1.6.0 — 2026-10-29: Dua Kurir & Dua Nomor Resi (2-Carrier Layout)
 
 ### Fitur
-Mendukung input lebih dari satu kurir dan nomor resi secara fleksibel (multi-carrier / pengiriman bertahap) pada Delivery Order serta menampilkan seluruh kurir & resi tersebut di halaman tracking publik / portal.
+Mendukung input 2 kurir dan 2 nomor resi pada tab Additional Info di Delivery Order (pengiriman estafet / multi-leg) dengan layout berurutan:
+- Carrier 1 (`carrier_id`)
+- Tracking Reference 1 (`carrier_tracking_ref`)
+- Link Tracking Publik 1 (`delivery_tracking_url`)
+- Carrier 2 (`carrier_id_2`)
+- Tracking Reference 2 (`carrier_tracking_ref_2`)
+- Link Tracking Publik 2 (`delivery_tracking_url_2`)
+- Weight & Weight for shipping (tetap di bawahnya)
 
 #### 1. Backend Form (Tab Additional Info)
-- Model baru `stock.picking.tracking.line` (`carrier_tracking_line_ids` One2many di `stock.picking`).
-- Tabel dinamis di tab Additional Info untuk memasukkan daftar Kurir, No. Resi, status per baris, dan estimasi tiba.
-- Dukungan input 2 kurir (atau lebih) secara fleksibel.
-- Sinkronisasi otomatis dua arah antara baris pertama dan field `carrier_id` / `carrier_tracking_ref` bawaan Odoo agar laporan Surat Jalan / Delivery Slip dan modul lain tetap kompatibel.
-- Tetap dapat diedit saat status picking `done`.
+- Penambahan field `carrier_id_2`, `carrier_tracking_ref_2`, dan `delivery_tracking_url_2`.
+- Form view `carrier_data` menampilkan input Kurir 1 & Resi 1 beserta link publik 1, disusul langsung oleh Kurir 2 & Resi 2 beserta link publik 2.
+- Field kurir dan resi tetap dapat diedit saat status picking `done`.
 
-#### 2. Portal & Public Tracking Page (`/tracking/<token>` & `/my/orders/<id>/tracking`)
-- Format tampilan metadata kurir dan resi di card atas ditampilkan rapi untuk tiap kurir (Resi, Kurir, Estimasi Tiba, Status badge).
-- Jika terdapat lebih dari 1 kurir, resi dan kurir ditandai label nomor (#1, #2, dst.) dan tombol link direct ke web kurir bila tersedia.
-- Riwayat status (History) menampilkan label badge nama kurir per item log.
+#### 2. Portal & Public Tracking Page (`/tracking/<token>`)
+- Masing-masing kurir memiliki link publik independen:
+  - Link 1: `/tracking/<token_1>` menampilkan tracking Kurir 1.
+  - Link 2: `/tracking/<token_2>` menampilkan tracking Kurir 2.
+- Pada halaman tracking, jika terdapat kurir kedua/pertama, ditampilkan tombol pintasan untuk membuka tracking kurir lainnya.
 
 #### 3. API Tracking & Polling
-- `_track_single` mengiterasi setiap baris kurir yang memiliki resi & mapping Biteship.
-- Menghitung agregasi status keseluruhan DO secara otomatis (misal satu kurir delivered dan satu in_transit -> status DO in_transit; keduanya delivered -> delivered).
-- Notifikasi Telegram ke salesperson merinci informasi seluruh kurir dan resi yang diinputkan.
+- `_track_single` mengecek status ke Biteship untuk Kurir 1 dan Kurir 2 jika resi terisi.
+- Notifikasi Telegram ke salesperson merinci Kurir 1 & Resi 1 (beserta Link 1) dan Kurir 2 & Resi 2 (beserta Link 2).
 
 #### 4. Migrasi (`migrations/16.0.1.6.0/post-migrate.py`)
-- Auto-backfill baris `stock_picking_tracking_line` untuk DO lama yang sudah memiliki `carrier_id` dan `carrier_tracking_ref`.
+- Auto-generate `delivery_tracking_token_2` untuk seluruh DO yang ada.
 
 ---
 

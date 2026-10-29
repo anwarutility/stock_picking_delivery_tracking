@@ -59,6 +59,9 @@ DELIVERY_TRACKING_STATUS_LABELS = {
 class StockPicking(models.Model):
     _inherit = "stock.picking"
 
+    # =========================================================================
+    # CARRIER 1 TRACKING FIELDS
+    # =========================================================================
     delivery_tracking_status = fields.Selection(
         TRACKING_STATUS_SELECTION,
         string="Delivery Tracking Status",
@@ -92,12 +95,53 @@ class StockPicking(models.Model):
         help="Stable Biteship tracking object id returned by the status API. "
         "Used to build the public tracking link shown in Telegram messages.",
     )
-    carrier_tracking_line_ids = fields.One2many(
-        "stock.picking.tracking.line",
-        "picking_id",
-        string="Kurir & Nomor Resi",
+
+    # =========================================================================
+    # CARRIER 2 TRACKING FIELDS
+    # =========================================================================
+    carrier_id_2 = fields.Many2one(
+        "delivery.carrier",
+        string="Kurir 2",
         copy=True,
+        help="Kurir kedua (pengiriman lanjutan / estafet).",
     )
+    carrier_tracking_ref_2 = fields.Char(
+        string="No. Resi 2",
+        copy=True,
+        help="Nomor resi kurir kedua.",
+    )
+    delivery_tracking_status_2 = fields.Selection(
+        TRACKING_STATUS_SELECTION,
+        string="Status Tracking Kurir 2",
+        default="draft",
+    )
+    delivery_tracking_status_desc_2 = fields.Char(
+        string="Keterangan Status Kurir 2",
+    )
+    delivery_last_check_2 = fields.Datetime(string="Last Check Kurir 2")
+    delivery_estimated_date_2 = fields.Datetime(string="Estimasi Tiba Kurir 2")
+    delivery_tracking_error_2 = fields.Char(
+        string="Tracking Error Kurir 2",
+    )
+    biteship_tracking_id_2 = fields.Char(
+        string="Biteship Tracking ID Kurir 2",
+        copy=False,
+    )
+    delivery_tracking_token_2 = fields.Char(
+        string="Delivery Tracking Token 2",
+        copy=False,
+        default=lambda self: uuid.uuid4().hex,
+        help="Secret token used in the public no-login tracking URL for Carrier 2.",
+    )
+    delivery_tracking_url_2 = fields.Char(
+        string="Public Tracking URL 2",
+        compute="_compute_delivery_tracking_url_2",
+        help="Public no-login URL that lets the customer follow the shipment of Carrier 2.",
+    )
+
+    # =========================================================================
+    # COMMON FIELDS
+    # =========================================================================
     tracking_log_ids = fields.One2many(
         "delivery.tracking.log",
         "picking_id",
@@ -145,8 +189,21 @@ class StockPicking(models.Model):
                 continue
             base_url = picking.get_base_url()
             if base_url.startswith("http://") and "orimax.co.id" in base_url:
-                base_url = "https://" + base_url[len("http://"):]
+                base_url = "https://" + base_url[len("http://") :]
             picking.delivery_tracking_url = "%s/tracking/%s" % (base_url, token)
+
+    @api.depends("delivery_tracking_token_2")
+    def _compute_delivery_tracking_url_2(self):
+        """Public no-login tracking URL 2 built from the secret token 2."""
+        for picking in self:
+            token = picking.delivery_tracking_token_2
+            if not token:
+                picking.delivery_tracking_url_2 = False
+                continue
+            base_url = picking.get_base_url()
+            if base_url.startswith("http://") and "orimax.co.id" in base_url:
+                base_url = "https://" + base_url[len("http://") :]
+            picking.delivery_tracking_url_2 = "%s/tracking/%s" % (base_url, token)
 
     def _ensure_delivery_tracking_token(self):
         """Set a fresh secret token on pickings that do not have one yet.
@@ -158,6 +215,8 @@ class StockPicking(models.Model):
         for picking in self:
             if not picking.delivery_tracking_token:
                 picking.delivery_tracking_token = uuid.uuid4().hex
+            if not picking.delivery_tracking_token_2:
+                picking.delivery_tracking_token_2 = uuid.uuid4().hex
         return self
 
     def _format_tracking_datetime(self, value):
@@ -183,44 +242,41 @@ class StockPicking(models.Model):
     def _tracking_status_display_label(self, status):
         return DELIVERY_TRACKING_STATUS_LABELS.get(status, status or "")
 
-    def _tracking_log_min_ts(self, log_filter):
-        """Earliest event_datetime of the matching tracking logs (or False)."""
-        ts = [
-            log.event_datetime
-            for log in self.tracking_log_ids
-            if log_filter(log) and log.event_datetime
-        ]
-        return min(ts) if ts else False
-
-    def _get_delivery_tracking_steps(self):
+    def _get_delivery_tracking_steps(self, carrier_num=1):
         """Return the ordered timeline milestones for the portal page.
 
         Each dict has: key, label, reached, current, ts and ts_display.
         ``current`` is the first milestone not reached yet (the one being
-        worked on) — or the last milestone once everything is reached. On an
-        exception the milestone flow is interrupted (no current step) and the
-        caller renders a dedicated exception banner instead.
+        worked on) — or the last milestone once everything is reached.
         """
         self.ensure_one()
-        status = self.delivery_tracking_status
+        carrier_obj = self.carrier_id if carrier_num == 1 else self.carrier_id_2
+        status = (
+            self.delivery_tracking_status
+            if carrier_num == 1
+            else self.delivery_tracking_status_2
+        )
         date_done = self.date_done or False
 
-        shipped_ts = (
-            self._tracking_log_min_ts(lambda log: log.status == "shipped")
-            or date_done
-        )
-        in_transit_ts = self._tracking_log_min_ts(
-            lambda log: log.status == "in_transit"
-        )
-        delivered_ts = self._tracking_log_min_ts(
-            lambda log: log.status == "delivered"
+        carrier_logs = self.tracking_log_ids.filtered(
+            lambda l: not l.carrier_id or l.carrier_id == carrier_obj
         )
 
-        # "Diantar" (out for delivery) is not an internal status: Biteship
-        # reports it as ``droppingoff`` which maps to ``in_transit``. Detect
-        # it from the raw history payload stored on the log rows.
+        def log_min_ts(log_filter):
+            ts = [
+                l.event_datetime
+                for l in carrier_logs
+                if log_filter(l) and l.event_datetime
+            ]
+            return min(ts) if ts else False
+
+        shipped_ts = log_min_ts(lambda l: l.status == "shipped") or date_done
+        in_transit_ts = log_min_ts(lambda l: l.status == "in_transit")
+        delivered_ts = log_min_ts(lambda l: l.status == "delivered")
+
+        # "Diantar" (out for delivery) detected from raw history payload
         out_for_delivery_ts = False
-        for log in self.tracking_log_ids:
+        for log in carrier_logs:
             raw_status = None
             if log.raw_response:
                 try:
@@ -251,13 +307,18 @@ class StockPicking(models.Model):
             ),
             "delivered": status == "delivered" or bool(delivered_ts),
         }
+        last_check = (
+            self.delivery_last_check
+            if carrier_num == 1
+            else self.delivery_last_check_2
+        )
         timestamps = {
             "order_created": self.create_date,
             "in_progress": self.date or self.create_date,
             "shipped": shipped_ts,
             "in_transit": in_transit_ts or shipped_ts,
             "out_for_delivery": out_for_delivery_ts or delivered_ts or shipped_ts,
-            "delivered": delivered_ts or self.delivery_last_check,
+            "delivered": delivered_ts or last_check,
         }
 
         steps = []
@@ -284,20 +345,64 @@ class StockPicking(models.Model):
             steps[-1]["current"] = True
         return steps
 
-    def _get_delivery_tracking_data(self):
-        """Build the full values dict rendered by the portal tracking page.
-
-        Only tracking-related fields are exposed: this is also used by the
-        no-login public token route, so no price / other order data leaks.
+    def _get_delivery_tracking_data(self, carrier_num=1):
+        """Build the values dict rendered by the portal tracking page for
+        either Carrier 1 or Carrier 2.
         """
         self.ensure_one()
-        status = self.delivery_tracking_status
+        if carrier_num == 2 and self.carrier_id_2:
+            status = self.delivery_tracking_status_2 or "draft"
+            status_desc = self.delivery_tracking_status_desc_2
+            status_error = self.delivery_tracking_error_2
+            courier_name = self.carrier_id_2.name or "-"
+            resi = self.carrier_tracking_ref_2 or False
+            eta = self.delivery_estimated_date_2
+            last_check = self.delivery_last_check_2
+            tracking_url = self.delivery_tracking_url_2
+            carrier_obj = self.carrier_id_2
+            carrier_label = "Kurir 2"
+            other_carrier = (
+                {
+                    "carrier_num": 1,
+                    "name": self.carrier_id.name or "-",
+                    "resi": self.carrier_tracking_ref or "-",
+                    "url": self.delivery_tracking_url,
+                    "label": "Kurir 1",
+                }
+                if self.carrier_tracking_ref
+                else False
+            )
+        else:
+            carrier_num = 1
+            status = self.delivery_tracking_status or "draft"
+            status_desc = self.delivery_tracking_status_desc
+            status_error = self.delivery_tracking_error
+            courier_name = self.carrier_id.name or "-"
+            resi = self.carrier_tracking_ref or False
+            eta = self.delivery_estimated_date
+            last_check = self.delivery_last_check
+            tracking_url = self.delivery_tracking_url
+            carrier_obj = self.carrier_id
+            carrier_label = "Kurir 1" if self.carrier_tracking_ref_2 else False
+            other_carrier = (
+                {
+                    "carrier_num": 2,
+                    "name": self.carrier_id_2.name or "-",
+                    "resi": self.carrier_tracking_ref_2 or "-",
+                    "url": self.delivery_tracking_url_2,
+                    "label": "Kurir 2",
+                }
+                if self.carrier_tracking_ref_2
+                else False
+            )
+
         exception = False
         if status == "exception":
             exception = {
-                "desc": self.delivery_tracking_status_desc,
-                "error": self.delivery_tracking_error,
+                "desc": status_desc,
+                "error": status_error,
             }
+
         history = [
             {
                 "status": log.status,
@@ -305,73 +410,41 @@ class StockPicking(models.Model):
                 "desc": log.status_desc,
                 "location": log.location,
                 "ts_display": self._format_tracking_datetime(log.event_datetime),
-                "courier_name": log.carrier_id.name if log.carrier_id else (self.carrier_id.name or "-"),
+                "courier_name": log.carrier_id.name
+                if log.carrier_id
+                else courier_name,
             }
-            for log in self.tracking_log_ids.sorted(
-                key=lambda log: log.event_datetime or dt.min
-            )
+            for log in self.tracking_log_ids.filtered(
+                lambda l: not l.carrier_id or l.carrier_id == carrier_obj
+            ).sorted(key=lambda log: log.event_datetime or dt.min)
         ]
-
-        tracking_lines = []
-        if self.carrier_tracking_line_ids:
-            for line in self.carrier_tracking_line_ids:
-                tracking_lines.append({
-                    "id": line.id,
-                    "resi": line.carrier_tracking_ref or False,
-                    "courier_name": line.carrier_id.name or "-",
-                    "eta_display": self._format_tracking_date(line.delivery_estimated_date) or self._format_tracking_date(self.delivery_estimated_date),
-                    "status": line.delivery_tracking_status,
-                    "current_status": {
-                        "label": self._tracking_status_display_label(line.delivery_tracking_status),
-                        "desc": line.delivery_tracking_status_desc,
-                    },
-                    "tracking_url": line.tracking_url,
-                })
-        elif self.carrier_tracking_ref:
-            tracking_lines.append({
-                "id": False,
-                "resi": self.carrier_tracking_ref or False,
-                "courier_name": self.carrier_id.name or "-",
-                "eta_display": self._format_tracking_date(self.delivery_estimated_date),
-                "status": status,
-                "current_status": {
-                    "label": self._tracking_status_display_label(status),
-                    "desc": self.delivery_tracking_status_desc,
-                },
-                "tracking_url": self._get_tracking_url(),
-            })
 
         return {
             "picking": self,
             "picking_name": self.name or "-",
             "partner_name": self.partner_id.name or "-",
-            "resi": self.carrier_tracking_ref or False,
-            "courier_name": self.carrier_id.name or "-",
-            "eta_display": self._format_tracking_date(self.delivery_estimated_date),
-            "last_check_display": self._format_tracking_datetime(
-                self.delivery_last_check
-            ),
+            "resi": resi,
+            "courier_name": courier_name,
+            "eta_display": self._format_tracking_date(eta),
+            "last_check_display": self._format_tracking_datetime(last_check),
             "status": status,
             "current_status": {
                 "label": self._tracking_status_display_label(status),
-                "desc": self.delivery_tracking_status_desc,
+                "desc": status_desc,
             },
-            "steps": self._get_delivery_tracking_steps(),
+            "steps": self._get_delivery_tracking_steps(carrier_num=carrier_num),
             "exception": exception,
             "unknown": status == "unknown",
-            "tracking_url": self.delivery_tracking_url,
+            "tracking_url": tracking_url,
             "history": history,
             "is_public": False,
-            "tracking_lines": tracking_lines,
+            "carrier_num": carrier_num,
+            "carrier_label": carrier_label,
+            "other_carrier": other_carrier,
         }
 
     def _parse_event_datetime(self, value):
-        """Parse an API timestamp into a naive UTC datetime.
-
-        Biteship ``updated_at`` uses ISO-8601 (``T`` separator, optional UTC
-        offset), which ``fields.Datetime.to_datetime`` cannot parse directly.
-        Returns ``None`` when the value is unparseable.
-        """
+        """Parse an API timestamp into a naive UTC datetime."""
         if not value:
             return None
         try:
@@ -387,11 +460,7 @@ class StockPicking(models.Model):
         return parsed
 
     def _extract_estimated_date(self, result):
-        """Best-effort estimated delivery date from the raw Biteship response.
-
-        Biteship does not document an ETD field for the tracking endpoint, so
-        common variants are checked defensively. Returns ``False`` when absent.
-        """
+        """Best-effort estimated delivery date from the raw Biteship response."""
         raw = result.get("raw_response")
         if not isinstance(raw, dict):
             return False
@@ -403,41 +472,48 @@ class StockPicking(models.Model):
                     return parsed
         return False
 
-    def _process_tracking_result(self, result):
-        """Apply a normalized tracking result to this picking.
-
-        - Always updates ``delivery_last_check`` (even on error) so failing
-          pickings are not retried on every poll.
-        - Creates one ``delivery.tracking.log`` per history entry whose event
-          datetime is not yet recorded (prevents duplicate logs each poll).
-        """
+    def _process_tracking_result(self, result, carrier_num=1):
+        """Apply a normalized tracking result for Carrier 1 or Carrier 2."""
         self.ensure_one()
         now = fields.Datetime.now()
-        vals = {
-            "delivery_last_check": now,
-            "delivery_tracking_status": result.get("status") or "unknown",
-            "delivery_tracking_status_desc": result.get("status_desc"),
-        }
-        # Persist the provider error whenever the check did not yield a real
-        # status, so warehouse staff can see WHY a picking is stuck on Unknown
-        # without digging into logs or a shell.
-        error_message = result.get("error")
-        if error_message and result.get("status") == "unknown":
-            vals["delivery_tracking_error"] = error_message
-        else:
-            vals["delivery_tracking_error"] = False
+        status = result.get("status") or "unknown"
+        status_desc = result.get("status_desc")
+        error_message = result.get("error") if status == "unknown" else False
         estimated_date = self._extract_estimated_date(result)
-        if estimated_date:
-            vals["delivery_estimated_date"] = estimated_date
         raw = result.get("raw_response")
-        if isinstance(raw, dict) and raw.get("id"):
-            vals["biteship_tracking_id"] = raw.get("id")
+        biteship_id = raw.get("id") if isinstance(raw, dict) else False
+
+        carrier = self.carrier_id if carrier_num == 1 else self.carrier_id_2
+
+        if carrier_num == 1:
+            vals = {
+                "delivery_last_check": now,
+                "delivery_tracking_status": status,
+                "delivery_tracking_status_desc": status_desc,
+                "delivery_tracking_error": error_message,
+            }
+            if estimated_date:
+                vals["delivery_estimated_date"] = estimated_date
+            if biteship_id:
+                vals["biteship_tracking_id"] = biteship_id
+        else:
+            vals = {
+                "delivery_last_check_2": now,
+                "delivery_tracking_status_2": status,
+                "delivery_tracking_status_desc_2": status_desc,
+                "delivery_tracking_error_2": error_message,
+            }
+            if estimated_date:
+                vals["delivery_estimated_date_2"] = estimated_date
+            if biteship_id:
+                vals["biteship_tracking_id_2"] = biteship_id
+
         self.write(vals)
 
         existing_dates = {
-            ts
-            for ts in self.tracking_log_ids.mapped("event_datetime")
-            if ts
+            log.event_datetime
+            for log in self.tracking_log_ids
+            if log.event_datetime and (not log.carrier_id or log.carrier_id == carrier)
         }
         for item in result.get("history") or []:
             event_datetime = self._parse_event_datetime(item.get("updated_at"))
@@ -446,6 +522,7 @@ class StockPicking(models.Model):
             self.env["delivery.tracking.log"].create(
                 {
                     "picking_id": self.id,
+                    "carrier_id": carrier.id if carrier else False,
                     "status": TrackingAPIClient._map_status(item.get("status")),
                     "status_desc": item.get("note"),
                     "location": item.get("location"),
@@ -456,98 +533,48 @@ class StockPicking(models.Model):
             existing_dates.add(event_datetime)
 
     def _track_single(self, provider=None):
-        """Fetch and process tracking status for this picking.
-
-        Supports multi-carrier tracking lines. If lines are defined, polls
-        each line and aggregates the status. Otherwise falls back to
-        single-carrier fields for backwards compatibility.
-        """
+        """Fetch and process tracking status for Carrier 1 and Carrier 2."""
         self.ensure_one()
-        lines = self.carrier_tracking_line_ids
-        if not lines:
-            if not self.carrier_tracking_ref:
-                _logger.warning(
-                    "Delivery tracking: picking %s has no carrier tracking ref.",
-                    self.name,
-                )
-                return False
-            if not self.carrier_id.biteship_courier_code:
-                _logger.warning(
-                    "Delivery tracking: carrier '%s' on picking %s is not mapped "
-                    "to a Biteship courier code.",
-                    self.carrier_id.name,
-                    self.name,
-                )
-                return False
-            if not provider:
-                provider = self._get_active_tracking_provider()
-            if not provider:
-                return False
-            client = TrackingAPIClient(provider)
-            result = client.get_status(
-                self.carrier_tracking_ref, self.carrier_id.biteship_courier_code
-            )
-            self._process_tracking_result(result)
-            return True
-
         if not provider:
             provider = self._get_active_tracking_provider()
         if not provider:
             return False
 
-        any_refreshed = False
-        for line in lines:
-            if line.carrier_tracking_ref and line.carrier_id.biteship_courier_code:
-                if line._track_single(provider):
-                    any_refreshed = True
+        client = TrackingAPIClient(provider)
+        refreshed = False
 
-        if not any_refreshed:
-            return False
+        # Carrier 1 tracking
+        if self.carrier_tracking_ref and self.carrier_id.biteship_courier_code:
+            res1 = client.get_status(
+                self.carrier_tracking_ref, self.carrier_id.biteship_courier_code
+            )
+            self._process_tracking_result(res1, carrier_num=1)
+            refreshed = True
+        elif self.carrier_tracking_ref:
+            _logger.warning(
+                "Delivery tracking: carrier 1 '%s' on %s is not mapped to Biteship.",
+                self.carrier_id.name,
+                self.name,
+            )
 
-        line_statuses = [l.delivery_tracking_status or "draft" for l in lines]
-        if all(s == "delivered" for s in line_statuses):
-            overall_status = "delivered"
-        elif any(s == "exception" for s in line_statuses):
-            overall_status = "exception"
-        elif any(s == "in_transit" for s in line_statuses):
-            overall_status = "in_transit"
-        elif any(s == "shipped" for s in line_statuses):
-            overall_status = "shipped"
-        elif any(s == "draft" for s in line_statuses):
-            overall_status = "draft"
-        else:
-            overall_status = "unknown"
+        # Carrier 2 tracking
+        if self.carrier_tracking_ref_2 and self.carrier_id_2.biteship_courier_code:
+            res2 = client.get_status(
+                self.carrier_tracking_ref_2, self.carrier_id_2.biteship_courier_code
+            )
+            self._process_tracking_result(res2, carrier_num=2)
+            refreshed = True
+        elif self.carrier_tracking_ref_2:
+            _logger.warning(
+                "Delivery tracking: carrier 2 '%s' on %s is not mapped to Biteship.",
+                self.carrier_id_2.name,
+                self.name,
+            )
 
-        active_line = next(
-            (l for l in reversed(lines) if l.delivery_tracking_status_desc),
-            lines[0],
-        )
-        overall_desc = active_line.delivery_tracking_status_desc or False
-        overall_error = (
-            active_line.delivery_tracking_error
-            if any(l.delivery_tracking_error for l in lines)
-            else False
-        )
-        estimated_dates = [
-            l.delivery_estimated_date for l in lines if l.delivery_estimated_date
-        ]
-        overall_eta = max(estimated_dates) if estimated_dates else False
-
-        self.with_context(skip_sync_tracking_lines=True).write({
-            "delivery_last_check": fields.Datetime.now(),
-            "delivery_tracking_status": overall_status,
-            "delivery_tracking_status_desc": overall_desc,
-            "delivery_tracking_error": overall_error,
-            "delivery_estimated_date": overall_eta,
-        })
-        return True
+        return refreshed
 
     def cron_check_delivery_status(self):
-        """Poll tracking status for eligible outgoing done pickings.
-
-        Batches the run (default 50, configurable via res.config.settings) and
-        processes oldest-checked first so long-stale pickings get priority.
-        """
+        """Poll tracking status for eligible outgoing done pickings."""
         provider = self._get_active_tracking_provider()
         if not provider:
             return False
@@ -563,11 +590,12 @@ class StockPicking(models.Model):
             ("state", "=", "done"),
             "|",
             ("carrier_tracking_ref", "!=", False),
-            ("carrier_tracking_line_ids", "!=", False),
+            ("carrier_tracking_ref_2", "!=", False),
+            "|",
             ("delivery_tracking_status", "not in", FINAL_TRACKING_STATUSES),
+            ("delivery_tracking_status_2", "not in", FINAL_TRACKING_STATUSES),
         ]
         pickings = self.search(domain)
-        # Oldest-checked first; never-checked (NULL last_check) get priority.
         pickings = pickings.sorted(
             key=lambda p: p.delivery_last_check or dt.min,
             reverse=False,
@@ -577,36 +605,31 @@ class StockPicking(models.Model):
         return True
 
     def action_check_delivery_status(self):
-        """Manually refresh tracking status for the current record(s).
-
-        Called from the "Cek Status Pengiriman" button on the Delivery form.
-        Shows a notification summarising the outcome instead of failing
-        silently.
-        """
+        """Manually refresh tracking status for the current record(s)."""
         for picking in self:
-            if picking.carrier_tracking_line_ids:
-                unmapped = [
-                    line.carrier_id.name
-                    for line in picking.carrier_tracking_line_ids
-                    if line.carrier_id and not line.carrier_id.biteship_courier_code
-                ]
-                if unmapped:
-                    raise UserError(
-                        _(
-                            "Courier '%s' is not mapped to a Biteship courier code. "
-                            "Please fill the 'Biteship Courier Code' field on the "
-                            "carrier (e.g. jne, jnt, lion, wahana, pos)."
-                        )
-                        % ", ".join(unmapped)
-                    )
-            elif not picking.carrier_id.biteship_courier_code:
+            if (
+                picking.carrier_tracking_ref
+                and not picking.carrier_id.biteship_courier_code
+            ):
                 raise UserError(
                     _(
-                        "Courier '%s' is not mapped to a Biteship courier code. "
-                        "Please fill the 'Biteship Courier Code' field on the "
-                        "carrier (e.g. jne, jnt, lion, wahana, pos)."
+                        "Kurir 1 '%s' belum di-mapping ke Biteship courier code."
                     )
-                    % (picking.carrier_id.name or "-")
+                    % picking.carrier_id.name
+                )
+            if (
+                picking.carrier_tracking_ref_2
+                and not picking.carrier_id_2.biteship_courier_code
+            ):
+                raise UserError(
+                    _(
+                        "Kurir 2 '%s' belum di-mapping ke Biteship courier code."
+                    )
+                    % picking.carrier_id_2.name
+                )
+            if not picking.carrier_tracking_ref and not picking.carrier_tracking_ref_2:
+                raise UserError(
+                    _("DO %s belum memiliki nomor resi.") % picking.name
                 )
 
         refreshed = 0
@@ -640,119 +663,59 @@ class StockPicking(models.Model):
             },
         }
 
-    @api.model_create_multi
-    def create(self, vals_list):
-        for vals in vals_list:
-            if (
-                vals.get("carrier_id")
-                and vals.get("carrier_tracking_ref")
-                and not vals.get("carrier_tracking_line_ids")
-            ):
-                vals["carrier_tracking_line_ids"] = [
-                    (
-                        0,
-                        0,
-                        {
-                            "carrier_id": vals["carrier_id"],
-                            "carrier_tracking_ref": vals["carrier_tracking_ref"],
-                        },
-                    )
-                ]
-        records = super().create(vals_list)
-        for rec in records:
-            if rec.carrier_tracking_line_ids and (
-                not rec.carrier_id or not rec.carrier_tracking_ref
-            ):
-                line1 = rec.carrier_tracking_line_ids[0]
-                rec.with_context(skip_sync_tracking_lines=True).write({
-                    "carrier_id": line1.carrier_id.id,
-                    "carrier_tracking_ref": line1.carrier_tracking_ref,
-                })
-        return records
-
     def write(self, vals):
-        """Trigger a one-time Telegram notification to the salesperson as
-        soon as ``carrier_tracking_ref`` or any tracking line is entered, and
-        reset the tracking state whenever the carrier or tracking reference changes.
-
-        A failed Telegram send must never roll back / fail the picking
-        write, so everything notification-related is wrapped in try/except.
-        """
-        changed_ref = "carrier_tracking_ref" in vals
-        changed_carrier = "carrier_id" in vals
-        changed_lines = "carrier_tracking_line_ids" in vals
-        changed = changed_ref or changed_carrier or changed_lines
+        """Trigger Telegram notification and reset tracking states on change."""
+        changed_1 = "carrier_tracking_ref" in vals or "carrier_id" in vals
+        changed_2 = "carrier_tracking_ref_2" in vals or "carrier_id_2" in vals
+        changed = changed_1 or changed_2
         previous = {}
         if changed:
-            # Snapshot the OLD values BEFORE the write: ``picking._origin``
-            # points to the same record (same cache), so it cannot be used
-            # to detect a real change after ``super().write()``.
             previous = {
                 picking.id: (
                     picking.carrier_tracking_ref,
                     picking.carrier_id,
-                    [
-                        (l.carrier_id.id, l.carrier_tracking_ref)
-                        for l in picking.carrier_tracking_line_ids
-                    ],
+                    picking.carrier_tracking_ref_2,
+                    picking.carrier_id_2,
                 )
                 for picking in self
             }
         res = super().write(vals)
-        if changed and not self.env.context.get("skip_sync_tracking_lines"):
+        if changed:
             for picking in self:
-                # 1. Sync lines -> carrier_id / carrier_tracking_ref
-                if changed_lines and picking.carrier_tracking_line_ids:
-                    line1 = picking.carrier_tracking_line_ids[0]
-                    if (
-                        picking.carrier_id != line1.carrier_id
-                        or picking.carrier_tracking_ref != line1.carrier_tracking_ref
-                    ):
-                        picking.with_context(skip_sync_tracking_lines=True).write({
-                            "carrier_id": line1.carrier_id.id,
-                            "carrier_tracking_ref": line1.carrier_tracking_ref,
-                        })
-                # 2. Sync carrier_id / carrier_tracking_ref -> lines
-                elif (changed_ref or changed_carrier) and (picking.carrier_id or picking.carrier_tracking_ref):
-                    if picking.carrier_tracking_line_ids:
-                        line1 = picking.carrier_tracking_line_ids[0]
-                        line_vals = {}
-                        if picking.carrier_id and line1.carrier_id != picking.carrier_id:
-                            line_vals["carrier_id"] = picking.carrier_id.id
-                        if picking.carrier_tracking_ref and line1.carrier_tracking_ref != picking.carrier_tracking_ref:
-                            line_vals["carrier_tracking_ref"] = picking.carrier_tracking_ref
-                        if line_vals:
-                            line1.with_context(skip_sync_tracking_lines=True).write(line_vals)
-                    elif picking.carrier_id and picking.carrier_tracking_ref:
-                        self.env["stock.picking.tracking.line"].with_context(
-                            skip_sync_tracking_lines=True
-                        ).create({
-                            "picking_id": picking.id,
-                            "carrier_id": picking.carrier_id.id,
-                            "carrier_tracking_ref": picking.carrier_tracking_ref,
-                        })
-
-                old_ref, old_carrier, old_lines = previous.get(picking.id, (None, None, None))
-                new_ref = picking.carrier_tracking_ref
-                new_carrier = picking.carrier_id
-                new_lines = [
-                    (l.carrier_id.id, l.carrier_tracking_ref)
-                    for l in picking.carrier_tracking_line_ids
-                ]
-                has_changed = (
-                    old_ref != new_ref
-                    or old_carrier != new_carrier
-                    or old_lines != new_lines
+                old_ref_1, old_car_1, old_ref_2, old_car_2 = previous.get(
+                    picking.id, (None, None, None, None)
                 )
-                if has_changed:
-                    picking.with_context(skip_sync_tracking_lines=True).write({
-                        "delivery_tracking_status": "draft",
-                        "delivery_tracking_status_desc": False,
-                        "delivery_tracking_error": False,
-                        "delivery_last_check": False,
-                        "delivery_tracking_token": uuid.uuid4().hex,
-                    })
-                    picking.tracking_notification_sent = False
+                reset_vals = {}
+                if (
+                    old_ref_1 != picking.carrier_tracking_ref
+                    or old_car_1 != picking.carrier_id
+                ):
+                    reset_vals.update(
+                        {
+                            "delivery_tracking_status": "draft",
+                            "delivery_tracking_status_desc": False,
+                            "delivery_tracking_error": False,
+                            "delivery_last_check": False,
+                            "delivery_tracking_token": uuid.uuid4().hex,
+                        }
+                    )
+                if (
+                    old_ref_2 != picking.carrier_tracking_ref_2
+                    or old_car_2 != picking.carrier_id_2
+                ):
+                    reset_vals.update(
+                        {
+                            "delivery_tracking_status_2": "draft",
+                            "delivery_tracking_status_desc_2": False,
+                            "delivery_tracking_error_2": False,
+                            "delivery_last_check_2": False,
+                            "delivery_tracking_token_2": uuid.uuid4().hex,
+                        }
+                    )
+                if reset_vals:
+                    reset_vals["tracking_notification_sent"] = False
+                    picking.write(reset_vals)
+
             icp = self.env["ir.config_parameter"].sudo()
             enabled = (
                 icp.get_param(
@@ -765,40 +728,29 @@ class StockPicking(models.Model):
                 for picking in self:
                     has_resi = bool(
                         picking.carrier_tracking_ref
-                        or any(l.carrier_tracking_ref for l in picking.carrier_tracking_line_ids)
+                        or picking.carrier_tracking_ref_2
                     )
-                    if (
-                        has_resi
-                        and not picking.tracking_notification_sent
-                    ):
+                    if has_resi and not picking.tracking_notification_sent:
                         try:
                             picking._notify_sales_telegram()
                         except Exception:
                             _logger.exception(
-                                "Delivery tracking Telegram notification "
-                                "failed for %s",
+                                "Delivery tracking Telegram notification failed for %s",
                                 picking.name,
                             )
         return res
 
     def _notify_sales_telegram(self):
-        """Send the tracking-reference notification to the DO's salesperson.
-
-        Sets ``tracking_notification_sent`` only after a successful send so
-        that a transient failure can be retried manually.
-        """
+        """Send the tracking-reference notification to the DO's salesperson."""
         self.ensure_one()
         salesperson = self.sale_id.user_id if self.sale_id else False
         if not salesperson or not salesperson.telegram_chat_id:
             _logger.info(
-                "DO %s: salesperson has no telegram_chat_id, "
-                "notification skipped",
+                "DO %s: salesperson has no telegram_chat_id, notification skipped",
                 self.name,
             )
             return
-        # Refresh the Biteship status first so ``biteship_tracking_id`` (and
-        # thus the public tracking link) is populated before sending. A
-        # failure here must never block the notification itself.
+
         try:
             self._track_single()
         except Exception as exc:
@@ -820,41 +772,48 @@ class StockPicking(models.Model):
                 exc,
             )
 
-    def _get_tracking_url(self):
-        """Public tracking URL for the picking, best available source first.
-
-        Prefers the stable Biteship tracking object id, then falls back to
-        the core ``carrier_tracking_url`` computed field. Returns ``False`` when no
-        link is available.
-        """
+    def _get_tracking_url(self, carrier_num=1):
+        """Public tracking URL for the picking, best available source first."""
         self.ensure_one()
+        if carrier_num == 2:
+            if self.biteship_tracking_id_2:
+                return "https://track.biteship.com/%s" % self.biteship_tracking_id_2
+            return False
         if self.biteship_tracking_id:
             return "https://track.biteship.com/%s" % self.biteship_tracking_id
         return self.carrier_tracking_url or False
 
     def _build_tracking_notification_message(self):
         self.ensure_one()
-        tracking_url = self.delivery_tracking_url or self._get_tracking_url() or ""
-        lines = self.carrier_tracking_line_ids
-        if len(lines) > 1:
-            courier_lines = "\n".join(
-                "Kurir %d: %s\nNo. Resi: %s" % (
-                    idx + 1,
-                    l.carrier_id.name or "-",
-                    l.carrier_tracking_ref or "-",
-                )
-                for idx, l in enumerate(lines)
-            )
+        url_1 = (
+            self.delivery_tracking_url
+            or self._get_tracking_url(carrier_num=1)
+            or ""
+        )
+        url_2 = (
+            self.delivery_tracking_url_2
+            or self._get_tracking_url(carrier_num=2)
+            or ""
+        )
+        if self.carrier_tracking_ref_2:
             return _(
                 "*DO %(name)s* sudah diinput resi\n"
                 "Customer: %(customer)s\n"
-                "%(courier_lines)s\n"
-                "Link Tracking: %(url)s"
+                "Kurir 1: %(courier_1)s\n"
+                "No. Resi 1: %(resi_1)s\n"
+                "Link Tracking 1: %(url_1)s\n"
+                "Kurir 2: %(courier_2)s\n"
+                "No. Resi 2: %(resi_2)s\n"
+                "Link Tracking 2: %(url_2)s"
             ) % {
                 "name": self.name or "-",
                 "customer": self.partner_id.name or "-",
-                "courier_lines": courier_lines,
-                "url": tracking_url or "(belum tersedia)",
+                "courier_1": self.carrier_id.name or "-",
+                "resi_1": self.carrier_tracking_ref or "-",
+                "url_1": url_1 or "(belum tersedia)",
+                "courier_2": self.carrier_id_2.name or "-",
+                "resi_2": self.carrier_tracking_ref_2 or "-",
+                "url_2": url_2 or "(belum tersedia)",
             }
         return _(
             "*DO %(name)s* sudah diinput resi\n"
@@ -867,7 +826,7 @@ class StockPicking(models.Model):
             "customer": self.partner_id.name or "-",
             "courier": self.carrier_id.name or "-",
             "resi": self.carrier_tracking_ref or "-",
-            "url": tracking_url or "(belum tersedia)",
+            "url": url_1 or "(belum tersedia)",
         }
 
     def _send_telegram_message(self, chat_id, message):
@@ -898,13 +857,9 @@ class StockPicking(models.Model):
         return response.json()
 
     def action_resend_tracking_notification(self):
-        """Manually resend the Telegram notification to the salesperson.
-
-        Useful when the salesperson registered their ``telegram_chat_id``
-        after the first attempt, or when a resend is needed.
-        """
+        """Manually resend the Telegram notification to the salesperson."""
         for picking in self:
-            if not picking.carrier_tracking_ref:
+            if not picking.carrier_tracking_ref and not picking.carrier_tracking_ref_2:
                 raise UserError(
                     _("DO %s belum punya nomor resi.") % picking.name
                 )
@@ -921,12 +876,7 @@ class StockPicking(models.Model):
         }
 
     def action_refresh_selected_delivery_status(self):
-        """Bulk refresh tracking status for selected Delivery Orders.
-
-        Bound as a server action on the list/kanban views. Guards against
-        firing more than 20 API calls per invocation and aggregates the
-        outcome (success/failure) into a single notification.
-        """
+        """Bulk refresh tracking status for selected Delivery Orders."""
         MAX_BULK = 20
         if len(self) > MAX_BULK:
             raise UserError(
@@ -943,17 +893,12 @@ class StockPicking(models.Model):
                     refreshed += 1
                 else:
                     failed += 1
-                    if not picking.carrier_tracking_ref:
+                    if not picking.carrier_tracking_ref and not picking.carrier_tracking_ref_2:
                         reason = _("%s: nomor resi kosong") % picking.name
-                    elif not picking.carrier_id.biteship_courier_code:
-                        reason = _("%s: kurir '%s' belum di-mapping Biteship") % (
-                            picking.name,
-                            picking.carrier_id.name,
-                        )
                     else:
-                        reason = _("%s: tidak ada provider aktif") % picking.name
+                        reason = _("%s: kurir belum di-mapping atau tidak ada provider aktif") % picking.name
                     failed_reasons.append(reason)
-            except Exception as exc:  # never crash the whole bulk run
+            except Exception as exc:
                 _logger.exception(
                     "Delivery tracking bulk refresh failed for %s", picking.name
                 )

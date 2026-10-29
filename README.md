@@ -6,9 +6,9 @@ Integrasi pengiriman dengan API Biteship
 - Polling status pengiriman Delivery Order via API Biteship
   (JNE, J&T, Wahana, Pos Indonesia, Lion Parcel).
 - Dashboard kanban status tracking.
-- **Multi-Kurir & Multi-Resi Fleksibel** — input 2 kurir atau lebih pada tab
-  Additional Info pada Delivery Order (pengiriman estafet / multi-leg) dan
-  menampilkan seluruh kurir beserta nomor resinya pada halaman tracking publik.
+- **Dukungan 2 Kurir & 2 Nomor Resi** — input Kurir 1 & Resi 1 (dengan Link Publik 1)
+  dan Kurir 2 & Resi 2 (dengan Link Publik 2) pada tab Additional Info di Delivery Order
+  (pengiriman estafet / multi-leg). Weight & Weight for shipping tetap di bawahnya.
 - Notifikasi Telegram satu kali ke Salesperson (penanggung jawab SO) saat
   nomor resi (`carrier_tracking_ref`) pertama kali diinput pada DO.
 - **Portal tracking customer** — halaman timeline/stepper status pengiriman,

@@ -3,65 +3,44 @@
 
     <!-- =========================================================
          FORM VIEW  (extends the base stock.picking form)
-         Tracking fields placed next to the carrier fields created
-         by the delivery module (group name="carrier_data").
-         Only visible for outgoing pickings (Delivery Orders).
+         Carrier 1, Tracking Ref 1, Link Publik 1
+         Carrier 2, Tracking Ref 2, Link Publik 2
+         Weight & Shipping Weight remain below
          ========================================================= -->
     <record id="view_picking_form_delivery_tracking" model="ir.ui.view">
         <field name="name">stock.picking.form.delivery.tracking</field>
         <field name="model">stock.picking</field>
         <field name="inherit_id" ref="stock.view_picking_form"/>
         <field name="arch" type="xml">
-            <!-- Tracking fields next to the carrier block -->
-            <xpath expr="//group[@name='carrier_data']" position="inside">
-                <label for="delivery_tracking_status"
-                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_status', '=', 'draft')]}"/>
-                <div attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_status', '=', 'draft')]}">
-                    <field name="delivery_tracking_status" widget="badge" class="oe_inline"/>
-                </div>
-                <label for="delivery_tracking_status_desc"
-                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_status_desc', '=', False)]}"/>
-                <field name="delivery_tracking_status_desc" readonly="1"
-                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_status_desc', '=', False)]}"/>
-                <label for="delivery_last_check"
-                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_last_check', '=', False)]}"/>
-                <field name="delivery_last_check" readonly="1"
-                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_last_check', '=', False)]}"/>
-                <label for="delivery_tracking_error"
-                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_error', '=', False)]}"/>
-                <field name="delivery_tracking_error" readonly="1"
-                       class="text-danger"
-                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('delivery_tracking_error', '=', False)]}"/>
-                <label for="delivery_tracking_url" string="Link Tracking Publik"
+            <!-- Kurir 1 labels -->
+            <xpath expr="//field[@name='carrier_id']" position="attributes">
+                <attribute name="string">Carrier 1</attribute>
+            </xpath>
+            <xpath expr="//label[@for='carrier_tracking_ref']" position="attributes">
+                <attribute name="string">Tracking Reference 1</attribute>
+            </xpath>
+
+            <!-- After Tracking 1: Link Public 1, then Carrier 2, Tracking Ref 2, Link Public 2 -->
+            <xpath expr="//div[@name='tracking']" position="after">
+                <label for="delivery_tracking_url" string="Link Tracking Publik 1"
                        attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"/>
                 <field name="delivery_tracking_url" class="o_dtd_backend_url"
                        readonly="1" widget="CopyClipboardURL"
                        attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"/>
-            </xpath>
 
-            <!-- Multi-carrier & tracking lines table -->
-            <xpath expr="//group[@name='carrier_data']" position="after">
-                <group string="Daftar Kurir &amp; Nomor Resi Pengiriman" name="group_carrier_tracking_lines" colspan="2"
-                       attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}">
-                    <field name="carrier_tracking_line_ids" nolabel="1"
-                           attrs="{'readonly': [('state', '=', 'cancel')]}">
-                        <tree editable="bottom">
-                            <field name="sequence" widget="handle"/>
-                            <field name="carrier_id" required="1" options="{'no_create': True, 'no_open': True}"/>
-                            <field name="carrier_tracking_ref" required="1"/>
-                            <field name="delivery_tracking_status" widget="badge" readonly="1"
-                                   decoration-success="delivery_tracking_status == 'delivered'"
-                                   decoration-warning="delivery_tracking_status == 'in_transit'"
-                                   decoration-danger="delivery_tracking_status == 'exception'"
-                                   decoration-info="delivery_tracking_status in ('shipped', 'unknown')"
-                                   decoration-muted="delivery_tracking_status == 'draft'"/>
-                            <field name="delivery_tracking_status_desc" readonly="1"/>
-                            <field name="delivery_estimated_date" readonly="1" optional="show"/>
-                            <field name="delivery_last_check" readonly="1" optional="hide"/>
-                            <field name="tracking_url" widget="url" string="Link Lacak" readonly="1" optional="show"/>
-                        </tree>
-                    </field>
-                </group>
+                <field name="carrier_id_2" string="Carrier 2"
+                       attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"
+                       options="{'no_create': True, 'no_open': True}"/>
+                <label for="carrier_tracking_ref_2" string="Tracking Reference 2"
+                       attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"/>
+                <div name="tracking_2" attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}">
+                    <field name="carrier_tracking_ref_2" class="oe_inline text-break"/>
+                </div>
+                <label for="delivery_tracking_url_2" string="Link Tracking Publik 2"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('carrier_tracking_ref_2', '=', False)]}"/>
+                <field name="delivery_tracking_url_2" class="o_dtd_backend_url"
+                       readonly="1" widget="CopyClipboardURL"
+                       attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('carrier_tracking_ref_2', '=', False)]}"/>
             </xpath>
 
             <!-- "Cek Status Pengiriman" button in the header -->
@@ -69,7 +48,7 @@
                 <button name="action_check_delivery_status" type="object"
                         string="Cek Status Pengiriman" class="oe_highlight"
                         groups="stock.group_stock_user"
-                        attrs="{'invisible': ['|', '|', ('picking_type_code', '!=', 'outgoing'), ('state', '!=', 'done'), ('carrier_tracking_ref', '=', False)]}"/>
+                        attrs="{'invisible': ['|', '|', ('picking_type_code', '!=', 'outgoing'), ('state', '!=', 'done'), '&amp;', ('carrier_tracking_ref', '=', False), ('carrier_tracking_ref_2', '=', False)]}"/>
             </xpath>
 
             <!-- "Kirim Ulang Notifikasi" button: manual Telegram resend -->
@@ -77,10 +56,10 @@
                 <button name="action_resend_tracking_notification" type="object"
                         string="Kirim Ulang Notifikasi"
                         groups="stock.group_stock_user"
-                        attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), ('carrier_tracking_ref', '=', False)]}"/>
+                        attrs="{'invisible': ['|', ('picking_type_code', '!=', 'outgoing'), '&amp;', ('carrier_tracking_ref', '=', False), ('carrier_tracking_ref_2', '=', False)]}"/>
             </xpath>
 
-            <!-- New tab "Riwayat Tracking" -->
+            <!-- Tab "Riwayat Tracking" -->
             <xpath expr="//notebook" position="inside">
                 <page string="Riwayat Tracking" name="delivery_tracking_history"
                       attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}">
@@ -103,9 +82,8 @@
         </field>
     </record>
 
-    <!-- Override base delivery view: make carrier_id and carrier_tracking_ref
-         editable even when the picking state is done/cancel, so a wrong
-         carrier or tracking number can be corrected after validation. -->
+    <!-- Override base delivery view: make carrier_id, carrier_tracking_ref,
+         carrier_id_2, and carrier_tracking_ref_2 editable even when the picking state is done/cancel -->
     <record id="view_picking_form_carrier_tracking_ref_editable" model="ir.ui.view">
         <field name="name">stock.picking.form.carrier.tracking.ref.editable</field>
         <field name="model">stock.picking</field>
@@ -116,6 +94,12 @@
                 <attribute name="attrs">{}</attribute>
             </xpath>
             <xpath expr="//field[@name='carrier_tracking_ref']" position="attributes">
+                <attribute name="attrs">{}</attribute>
+            </xpath>
+            <xpath expr="//field[@name='carrier_id_2']" position="attributes">
+                <attribute name="attrs">{'invisible': [('picking_type_code', '!=', 'outgoing')]}</attribute>
+            </xpath>
+            <xpath expr="//field[@name='carrier_tracking_ref_2']" position="attributes">
                 <attribute name="attrs">{}</attribute>
             </xpath>
         </field>

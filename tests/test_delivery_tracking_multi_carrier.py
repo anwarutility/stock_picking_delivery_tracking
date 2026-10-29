@@ -5,14 +5,14 @@ from unittest.mock import patch
 from odoo.tests.common import TransactionCase
 
 
-class TestDeliveryTrackingMultiCarrier(TransactionCase):
-    """Test suite for multiple carriers and tracking lines."""
+class TestDeliveryTrackingTwoCarriers(TransactionCase):
+    """Test suite for 2 carriers & 2 tracking references."""
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         cls.Picking = cls.env["stock.picking"]
-        cls.partner = cls.env["res.partner"].create({"name": "Multi Carrier Customer"})
+        cls.partner = cls.env["res.partner"].create({"name": "Two Carrier Customer"})
         cls.picking_type_out = cls.env.ref("stock.picking_type_out")
         cls.carrier_jne = cls.env["delivery.carrier"].create(
             {
@@ -35,182 +35,61 @@ class TestDeliveryTrackingMultiCarrier(TransactionCase):
             }
         )
 
-    def test_01_create_with_carrier_and_ref_auto_populates_line(self):
+    def test_01_two_carriers_tokens_and_urls(self):
         picking = self.Picking.create(
             {
                 "picking_type_id": self.picking_type_out.id,
                 "partner_id": self.partner.id,
                 "carrier_id": self.carrier_jne.id,
                 "carrier_tracking_ref": "JNE-1001",
+                "carrier_id_2": self.carrier_jnt.id,
+                "carrier_tracking_ref_2": "JNT-2002",
             }
         )
-        self.assertEqual(len(picking.carrier_tracking_line_ids), 1)
-        line = picking.carrier_tracking_line_ids[0]
-        self.assertEqual(line.carrier_id, self.carrier_jne)
-        self.assertEqual(line.carrier_tracking_ref, "JNE-1001")
+        self.assertTrue(picking.delivery_tracking_token)
+        self.assertTrue(picking.delivery_tracking_token_2)
+        self.assertNotEqual(picking.delivery_tracking_token, picking.delivery_tracking_token_2)
+        self.assertIn("/tracking/%s" % picking.delivery_tracking_token, picking.delivery_tracking_url)
+        self.assertIn("/tracking/%s" % picking.delivery_tracking_token_2, picking.delivery_tracking_url_2)
 
-    def test_02_create_with_two_tracking_lines(self):
+    def test_02_telegram_notification_includes_both_couriers(self):
         picking = self.Picking.create(
             {
                 "picking_type_id": self.picking_type_out.id,
                 "partner_id": self.partner.id,
-                "carrier_tracking_line_ids": [
-                    (
-                        0,
-                        0,
-                        {
-                            "sequence": 10,
-                            "carrier_id": self.carrier_jne.id,
-                            "carrier_tracking_ref": "JNE-1002",
-                        },
-                    ),
-                    (
-                        0,
-                        0,
-                        {
-                            "sequence": 20,
-                            "carrier_id": self.carrier_jnt.id,
-                            "carrier_tracking_ref": "JNT-2002",
-                        },
-                    ),
-                ],
-            }
-        )
-        self.assertEqual(len(picking.carrier_tracking_line_ids), 2)
-        # picking carrier and tracking ref sync with the first line
-        self.assertEqual(picking.carrier_id, self.carrier_jne)
-        self.assertEqual(picking.carrier_tracking_ref, "JNE-1002")
-
-        # Portal / public data contains both lines
-        data = picking._get_delivery_tracking_data()
-        self.assertIn("tracking_lines", data)
-        self.assertEqual(len(data["tracking_lines"]), 2)
-        self.assertEqual(data["tracking_lines"][0]["resi"], "JNE-1002")
-        self.assertEqual(data["tracking_lines"][0]["courier_name"], "JNE")
-        self.assertEqual(data["tracking_lines"][1]["resi"], "JNT-2002")
-        self.assertEqual(data["tracking_lines"][1]["courier_name"], "J&T")
-
-    def test_03_telegram_message_formats_two_couriers(self):
-        picking = self.Picking.create(
-            {
-                "picking_type_id": self.picking_type_out.id,
-                "partner_id": self.partner.id,
-                "carrier_tracking_line_ids": [
-                    (
-                        0,
-                        0,
-                        {
-                            "sequence": 10,
-                            "carrier_id": self.carrier_jne.id,
-                            "carrier_tracking_ref": "JNE-1003",
-                        },
-                    ),
-                    (
-                        0,
-                        0,
-                        {
-                            "sequence": 20,
-                            "carrier_id": self.carrier_jnt.id,
-                            "carrier_tracking_ref": "JNT-2003",
-                        },
-                    ),
-                ],
+                "carrier_id": self.carrier_jne.id,
+                "carrier_tracking_ref": "JNE-1001",
+                "carrier_id_2": self.carrier_jnt.id,
+                "carrier_tracking_ref_2": "JNT-2002",
             }
         )
         msg = picking._build_tracking_notification_message()
         self.assertIn("Kurir 1: JNE", msg)
-        self.assertIn("No. Resi: JNE-1003", msg)
+        self.assertIn("No. Resi 1: JNE-1001", msg)
         self.assertIn("Kurir 2: J&T", msg)
-        self.assertIn("No. Resi: JNT-2003", msg)
+        self.assertIn("No. Resi 2: JNT-2002", msg)
+        self.assertIn("Link Tracking 1:", msg)
+        self.assertIn("Link Tracking 2:", msg)
 
-    def test_04_editing_lines_regenerates_token_and_resets_status(self):
+    def test_03_get_delivery_tracking_data_per_carrier(self):
         picking = self.Picking.create(
             {
                 "picking_type_id": self.picking_type_out.id,
                 "partner_id": self.partner.id,
-                "carrier_tracking_line_ids": [
-                    (
-                        0,
-                        0,
-                        {
-                            "sequence": 10,
-                            "carrier_id": self.carrier_jne.id,
-                            "carrier_tracking_ref": "JNE-OLD",
-                        },
-                    ),
-                ],
+                "carrier_id": self.carrier_jne.id,
+                "carrier_tracking_ref": "JNE-1001",
+                "carrier_id_2": self.carrier_jnt.id,
+                "carrier_tracking_ref_2": "JNT-2002",
             }
         )
-        old_token = picking.delivery_tracking_token
-        picking.delivery_tracking_status = "shipped"
+        data1 = picking._get_delivery_tracking_data(carrier_num=1)
+        self.assertEqual(data1["courier_name"], "JNE")
+        self.assertEqual(data1["resi"], "JNE-1001")
+        self.assertEqual(data1["other_carrier"]["label"], "Kurir 2")
+        self.assertEqual(data1["other_carrier"]["resi"], "JNT-2002")
 
-        # Update first line resi
-        line = picking.carrier_tracking_line_ids[0]
-        line.write({"carrier_tracking_ref": "JNE-NEW"})
-        picking.invalidate_recordset()
-
-        self.assertNotEqual(picking.delivery_tracking_token, old_token)
-        self.assertEqual(picking.delivery_tracking_status, "draft")
-
-    def test_05_track_single_aggregates_multiple_lines(self):
-        picking = self.Picking.create(
-            {
-                "picking_type_id": self.picking_type_out.id,
-                "partner_id": self.partner.id,
-                "carrier_tracking_line_ids": [
-                    (
-                        0,
-                        0,
-                        {
-                            "sequence": 10,
-                            "carrier_id": self.carrier_jne.id,
-                            "carrier_tracking_ref": "JNE-3001",
-                        },
-                    ),
-                    (
-                        0,
-                        0,
-                        {
-                            "sequence": 20,
-                            "carrier_id": self.carrier_jnt.id,
-                            "carrier_tracking_ref": "JNT-3002",
-                        },
-                    ),
-                ],
-            }
-        )
-        provider = self.env["delivery.tracking.provider"].create(
-            {
-                "name": "Biteship Test Provider",
-                "api_key": "biteship_test.123",
-                "active": True,
-            }
-        )
-
-        def mock_get_status(self_client, waybill_id, courier_code):
-            if waybill_id == "JNE-3001":
-                return {
-                    "status": "delivered",
-                    "status_desc": "Paket diterima",
-                    "history": [],
-                }
-            else:
-                return {
-                    "status": "in_transit",
-                    "status_desc": "Paket sedang diantar kurir lokal",
-                    "history": [],
-                }
-
-        with patch(
-            "odoo.addons.stock_picking_delivery_tracking.services.tracking_api_client.TrackingAPIClient.get_status",
-            side_effect=mock_get_status,
-        ):
-            success = picking._track_single(provider)
-
-        self.assertTrue(success)
-        line1 = picking.carrier_tracking_line_ids[0]
-        line2 = picking.carrier_tracking_line_ids[1]
-        self.assertEqual(line1.delivery_tracking_status, "delivered")
-        self.assertEqual(line2.delivery_tracking_status, "in_transit")
-        # Overall status when one is in_transit and one is delivered is in_transit
-        self.assertEqual(picking.delivery_tracking_status, "in_transit")
+        data2 = picking._get_delivery_tracking_data(carrier_num=2)
+        self.assertEqual(data2["courier_name"], "J&T")
+        self.assertEqual(data2["resi"], "JNT-2002")
+        self.assertEqual(data2["other_carrier"]["label"], "Kurir 1")
+        self.assertEqual(data2["other_carrier"]["resi"], "JNE-1001")
