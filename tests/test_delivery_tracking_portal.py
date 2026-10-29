@@ -153,6 +153,19 @@ class TestDeliveryTrackingSteps(TransactionCase):
         self.assertTrue(staying["out_for_delivery"])
         self.assertFalse(staying["delivered"])
 
+    def test_05_picking_done_without_resi_shows_in_progress(self):
+        picking = self._make_picking(resi=False, state="done")
+        steps = picking._get_delivery_tracking_steps()
+        self.assertTrue(steps[0]["reached"])  # Order Dibuat
+        self.assertFalse(steps[1]["reached"])  # Diproses
+        self.assertTrue(steps[1]["current"])  # currently Diproses
+        self.assertFalse(steps[2]["reached"])  # Dikirim NOT reached
+        self.assertFalse(steps[3]["reached"])  # Dalam Perjalanan NOT reached
+        self.assertFalse(steps[3]["current"])  # Dalam Perjalanan NOT current
+
+        data = picking._get_delivery_tracking_data()
+        self.assertEqual(data["current_status"]["label"], "Diproses")
+
 
 class TestDeliveryTrackingPortalLogic(TransactionCase):
     """Portal access-control + public-token lookup — deterministic tests.

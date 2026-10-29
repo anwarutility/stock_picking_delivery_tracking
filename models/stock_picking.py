@@ -265,6 +265,8 @@ class StockPicking(models.Model):
         """
         self.ensure_one()
         carrier_obj = self.carrier_id if carrier_num == 1 else self.carrier_id_2
+        resi = self.carrier_tracking_ref if carrier_num == 1 else self.carrier_tracking_ref_2
+        has_resi = bool(resi and str(resi).strip())
         status = (
             self.delivery_tracking_status
             if carrier_num == 1
@@ -284,7 +286,7 @@ class StockPicking(models.Model):
             ]
             return min(ts) if ts else False
 
-        shipped_ts = log_min_ts(lambda l: l.status == "shipped") or date_done
+        shipped_ts = log_min_ts(lambda l: l.status == "shipped") or (date_done if has_resi else False)
         in_transit_ts = log_min_ts(lambda l: l.status == "in_transit")
         delivered_ts = log_min_ts(lambda l: l.status == "delivered")
 
@@ -307,20 +309,33 @@ class StockPicking(models.Model):
                 if ts and (not out_for_delivery_ts or ts < out_for_delivery_ts):
                     out_for_delivery_ts = ts
 
-        reached = {
-            "order_created": True,
-            "in_progress": self.state in ("assigned", "done"),
-            "shipped": (
-                self.state == "done"
-                or status in ("shipped", "in_transit", "delivered")
-                or bool(shipped_ts)
-            ),
-            "in_transit": status in ("in_transit", "delivered") or bool(in_transit_ts),
-            "out_for_delivery": (
-                bool(out_for_delivery_ts) or status == "delivered" or bool(delivered_ts)
-            ),
-            "delivered": status == "delivered" or bool(delivered_ts),
-        }
+        if not has_resi:
+            # Jika nomor resi belum diinput: barang masih diproses / disiapkan di gudang.
+            # Status 'Dikirim' belum dicentang, dan status yang aktif adalah 'Diproses'.
+            reached = {
+                "order_created": True,
+                "in_progress": False,
+                "shipped": False,
+                "in_transit": False,
+                "out_for_delivery": False,
+                "delivered": False,
+            }
+        else:
+            reached = {
+                "order_created": True,
+                "in_progress": True,
+                "shipped": (
+                    self.state == "done"
+                    or status in ("shipped", "in_transit", "delivered")
+                    or bool(shipped_ts)
+                ),
+                "in_transit": status in ("in_transit", "delivered") or bool(in_transit_ts),
+                "out_for_delivery": (
+                    bool(out_for_delivery_ts) or status == "delivered" or bool(delivered_ts)
+                ),
+                "delivered": status == "delivered" or bool(delivered_ts),
+            }
+
         last_check = (
             self.delivery_last_check
             if carrier_num == 1
@@ -329,24 +344,25 @@ class StockPicking(models.Model):
         timestamps = {
             "order_created": self.create_date,
             "in_progress": self.date or self.create_date,
-            "shipped": shipped_ts,
-            "in_transit": in_transit_ts or shipped_ts,
-            "out_for_delivery": out_for_delivery_ts or delivered_ts or shipped_ts,
-            "delivered": delivered_ts or last_check,
+            "shipped": shipped_ts if reached["shipped"] else False,
+            "in_transit": in_transit_ts if reached["in_transit"] else False,
+            "out_for_delivery": out_for_delivery_ts if reached["out_for_delivery"] else False,
+            "delivered": delivered_ts or (last_check if reached["delivered"] else False),
         }
 
         steps = []
         for key, label in DELIVERY_TRACKING_STEPS:
             reached_flag = bool(reached.get(key))
             ts = timestamps.get(key)
+            ts_to_display = ts if (reached_flag or key in ("order_created", "in_progress")) else False
             steps.append(
                 {
                     "key": key,
                     "label": label,
                     "reached": reached_flag,
                     "current": False,
-                    "ts": ts,
-                    "ts_display": self._format_tracking_datetime(ts),
+                    "ts": ts_to_display,
+                    "ts_display": self._format_tracking_datetime(ts_to_display) if ts_to_display else False,
                 }
             )
 
@@ -433,6 +449,11 @@ class StockPicking(models.Model):
             ).sorted(key=lambda log: log.event_datetime or dt.min)
         ]
 
+        display_label = self._tracking_status_display_label(status)
+        if not resi and status == "draft":
+            display_label = "Diproses"
+            status_desc = status_desc or "Pesanan sedang disiapkan di gudang"
+
         return {
             "picking": self,
             "picking_name": self.name or "-",
@@ -443,7 +464,7 @@ class StockPicking(models.Model):
             "last_check_display": self._format_tracking_datetime(last_check),
             "status": status,
             "current_status": {
-                "label": self._tracking_status_display_label(status),
+                "label": display_label,
                 "desc": status_desc,
             },
             "steps": self._get_delivery_tracking_steps(carrier_num=carrier_num),
