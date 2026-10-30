@@ -613,6 +613,24 @@ class StockPicking(models.Model):
             display_label = "Diproses"
             status_desc = status_desc or "Pesanan sedang disiapkan di gudang"
 
+        # Calculate route progress percentage for visual bar
+        if status == "delivered":
+            route_progress_percent = 100
+        elif status == "in_transit":
+            route_progress_percent = 70
+        elif status == "shipped":
+            route_progress_percent = 45
+        elif resi:
+            route_progress_percent = 25
+        else:
+            route_progress_percent = 10
+
+        total_weight = self.shipping_weight or self.weight or 0.0
+        weight_display = f"{total_weight:.2f} kg" if total_weight > 0 else False
+
+        company_phone = self.company_id.phone or self.company_id.mobile or ""
+        company_email = self.company_id.email or ""
+
         return {
             "picking": self,
             "picking_name": self.name or "-",
@@ -635,6 +653,10 @@ class StockPicking(models.Model):
             "origin_info": origin_info,
             "dest_info": dest_info,
             "courier_tabs": courier_tabs,
+            "route_progress_percent": route_progress_percent,
+            "weight_display": weight_display,
+            "company_phone": company_phone,
+            "company_email": company_email,
             "is_public": False,
             "carrier_num": carrier_num,
             "carrier_label": carrier_label,

@@ -3,7 +3,7 @@
 
 {
     "name": "Stock Picking Delivery Tracking",
-    "version": "16.0.1.9.0",
+    "version": "16.0.1.10.0",
     "summary": "Delivery status tracking via logistics API (Dual Carrier Support)",
     "category": "Inventory",
     "author": "PT Aston Graphindo Indonesia",
