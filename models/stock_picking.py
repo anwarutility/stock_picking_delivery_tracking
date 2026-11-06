@@ -268,6 +268,57 @@ class StockPicking(models.Model):
         except Exception:
             return False
 
+    def _get_tracking_event_icon(self, status, title=""):
+        """Return a FontAwesome icon class matching the milestone or event status."""
+        s = (status or "").lower()
+        t = (title or "").lower()
+        if "selesai" in t or "diterima" in t or s == "delivered":
+            return "fa-check-circle text-success"
+        if "antar" in t or "out_for_delivery" in s:
+            return "fa-motorcycle text-primary"
+        if "jalan" in t or "transit" in s:
+            return "fa-truck text-primary"
+        if "resi" in t or s == "shipped":
+            return "fa-barcode text-info"
+        if "kemas" in t or "siap" in t or s in ("in_progress", "ready"):
+            return "fa-archive text-warning"
+        if "dibuat" in t or s == "draft":
+            return "fa-file-text-o text-muted"
+        if "kendala" in t or s == "exception":
+            return "fa-exclamation-triangle text-danger"
+        return "fa-circle-o text-muted"
+
+    def _get_carrier_brand_info(self, carrier_obj):
+        """Return courier brand colors, styling class, and clean display name."""
+        code = ""
+        name = ""
+        if carrier_obj:
+            code = (getattr(carrier_obj, "biteship_courier_code", "") or "").lower()
+            name = carrier_obj.name or ""
+        n_low = name.lower()
+
+        if "j&t cargo" in n_low or "jnt cargo" in n_low or "jntcargo" in code:
+            return {"brand_class": "carrier-jntcargo", "badge_label": "J&T Cargo", "code": "jntcargo", "color": "#ED1C24"}
+        elif "j&t" in n_low or "jnt" in code:
+            return {"brand_class": "carrier-jnt", "badge_label": "J&T Express", "code": "jnt", "color": "#ED1C24"}
+        elif "jne" in n_low or "jne" in code:
+            return {"brand_class": "carrier-jne", "badge_label": "JNE Express", "code": "jne", "color": "#003366"}
+        elif "sicepat" in n_low or "sicepat" in code:
+            return {"brand_class": "carrier-sicepat", "badge_label": "SiCepat", "code": "sicepat", "color": "#CD0000"}
+        elif "anteraja" in n_low or "anteraja" in code:
+            return {"brand_class": "carrier-anteraja", "badge_label": "Anteraja", "code": "anteraja", "color": "#D81A60"}
+        elif "pos" in n_low or "pos" in code:
+            return {"brand_class": "carrier-pos", "badge_label": "POS Indonesia", "code": "pos", "color": "#FF6600"}
+        elif "tiki" in n_low or "tiki" in code:
+            return {"brand_class": "carrier-tiki", "badge_label": "TIKI", "code": "tiki", "color": "#003B70"}
+        elif "ninja" in n_low or "ninja" in code:
+            return {"brand_class": "carrier-ninja", "badge_label": "Ninja Xpress", "code": "ninja", "color": "#C41230"}
+        elif "lion" in n_low or "lion" in code:
+            return {"brand_class": "carrier-lion", "badge_label": "Lion Parcel", "code": "lion", "color": "#E61C24"}
+        elif "spx" in n_low or "shopee" in n_low:
+            return {"brand_class": "carrier-spx", "badge_label": "SPX Express", "code": "spx", "color": "#EE4D2D"}
+        return {"brand_class": "carrier-generic", "badge_label": name or "Ekspedisi", "code": "generic", "color": "#2563EB"}
+
     def _tracking_status_display_label(self, status):
         return DELIVERY_TRACKING_STATUS_LABELS.get(status, status or "")
 
@@ -493,8 +544,9 @@ class StockPicking(models.Model):
         detailed_progress = []
         if carrier_logs:
             for idx, log in enumerate(carrier_logs):
+                st_label = self._tracking_status_display_label(log.status).upper()
                 detailed_progress.append({
-                    "title": self._tracking_status_display_label(log.status).upper(),
+                    "title": st_label,
                     "desc": log.status_desc or "",
                     "location": log.location or "",
                     "date_display": self._format_tracking_date(log.event_datetime),
@@ -503,6 +555,7 @@ class StockPicking(models.Model):
                     "is_latest": (idx == 0),
                     "status": log.status,
                     "courier_name": log.carrier_id.name if log.carrier_id else courier_name,
+                    "icon": self._get_tracking_event_icon(log.status, log.status_desc or st_label),
                 })
             # Add initial warehouse milestones at the base of the history
             if resi:
@@ -516,6 +569,7 @@ class StockPicking(models.Model):
                     "is_latest": False,
                     "status": "shipped",
                     "courier_name": courier_name,
+                    "icon": "fa-barcode text-info",
                 })
             detailed_progress.append({
                 "title": "ORDER DIBUAT",
@@ -527,6 +581,7 @@ class StockPicking(models.Model):
                 "is_latest": False,
                 "status": "draft",
                 "courier_name": courier_name,
+                "icon": "fa-file-text-o text-muted",
             })
         else:
             # Belum ada log dari API kurir
@@ -542,6 +597,7 @@ class StockPicking(models.Model):
                         "is_latest": True,
                         "status": "shipped",
                         "courier_name": courier_name,
+                        "icon": "fa-barcode text-info",
                     },
                     {
                         "title": "PESANAN SELESAI DIKEMAS",
@@ -553,6 +609,7 @@ class StockPicking(models.Model):
                         "is_latest": False,
                         "status": "in_progress",
                         "courier_name": courier_name,
+                        "icon": "fa-archive text-warning",
                     },
                     {
                         "title": "ORDER DIBUAT",
@@ -564,6 +621,7 @@ class StockPicking(models.Model):
                         "is_latest": False,
                         "status": "draft",
                         "courier_name": courier_name,
+                        "icon": "fa-file-text-o text-muted",
                     },
                 ]
             else:
@@ -578,6 +636,7 @@ class StockPicking(models.Model):
                         "is_latest": True,
                         "status": "draft",
                         "courier_name": courier_name,
+                        "icon": "fa-archive text-warning",
                     },
                     {
                         "title": "ORDER DIBUAT",
@@ -589,6 +648,7 @@ class StockPicking(models.Model):
                         "is_latest": False,
                         "status": "draft",
                         "courier_name": courier_name,
+                        "icon": "fa-file-text-o text-muted",
                     },
                 ]
 
@@ -631,15 +691,48 @@ class StockPicking(models.Model):
         company_phone = self.company_id.phone or self.company_id.mobile or ""
         company_email = self.company_id.email or ""
 
+        # Extract items shipped in this picking
+        package_items = []
+        try:
+            moves = self.move_ids_without_package or self.move_ids
+            for move in moves[:12]:
+                qty = move.quantity_done if move.quantity_done > 0 else move.product_uom_qty
+                if qty > 0:
+                    package_items.append({
+                        "name": move.product_id.name or move.name or "Item Produk",
+                        "qty": ("%g" % qty) if isinstance(qty, (int, float)) else str(qty),
+                        "uom": move.product_uom.name if move.product_uom else "Pcs",
+                    })
+        except Exception:
+            package_items = []
+
+        carrier_brand = self._get_carrier_brand_info(carrier_obj)
+        order_reference = self.origin or (self.sale_id and self.sale_id.name) or ""
+
+        status_tone_map = {
+            "delivered": "success",
+            "in_transit": "primary",
+            "shipped": "info",
+            "draft": "warning",
+            "in_progress": "warning",
+            "exception": "danger",
+            "unknown": "secondary",
+        }
+        status_tone = status_tone_map.get(status, "primary")
+
         return {
             "picking": self,
             "picking_name": self.name or "-",
+            "order_reference": order_reference,
             "partner_name": self.partner_id.name or "-",
             "resi": resi,
             "courier_name": courier_name,
+            "carrier_brand": carrier_brand,
             "eta_display": self._format_tracking_date(eta),
             "last_check_display": self._format_tracking_datetime(last_check),
+            "create_date_display": self._format_tracking_datetime(self.create_date),
             "status": status,
+            "status_tone": status_tone,
             "current_status": {
                 "label": display_label,
                 "desc": status_desc,
@@ -653,6 +746,7 @@ class StockPicking(models.Model):
             "origin_info": origin_info,
             "dest_info": dest_info,
             "courier_tabs": courier_tabs,
+            "package_items": package_items,
             "route_progress_percent": route_progress_percent,
             "weight_display": weight_display,
             "company_phone": company_phone,
