@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates>
+    <t t-name="stock_picking_delivery_tracking.CopyTrackingUrlField" owl="1">
+        <div class="o_dtd_copy_url d-flex align-items-center">
+            <input t-ref="input"
+                   type="text"
+                   class="form-control form-control-sm o_dtd_copy_url_input"
+                   readonly="readonly"
+                   t-att-value="props.value || ''"
+                   t-on-click="selectAll"/>
+            <button t-if="props.value"
+                    type="button"
+                    class="btn btn-sm btn-primary o_dtd_copy_url_button ms-2"
+                    t-on-click="copy">
+                <i class="fa fa-clipboard"/> Salin
+            </button>
+        </div>
+    </t>
+</templates>

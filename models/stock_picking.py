@@ -503,7 +503,7 @@ class StockPicking(models.Model):
         wh = self.picking_type_id.warehouse_id
         origin_city = (wh and wh.partner_id and wh.partner_id.city) or self.company_id.city or "Jakarta"
         origin_info = {
-            "name": self.company_id.name or "PT Aston Graphindo Indonesia",
+            "name": self.company_id.name or "Pengirim",
             "city": origin_city,
         }
 
@@ -690,6 +690,9 @@ class StockPicking(models.Model):
 
         company_phone = self.company_id.phone or self.company_id.mobile or ""
         company_email = self.company_id.email or ""
+        wa_digits = "".join(ch for ch in company_phone if ch.isdigit())
+        if wa_digits.startswith("0"):
+            wa_digits = "62" + wa_digits[1:]
 
         # Extract items shipped in this picking
         package_items = []
@@ -750,6 +753,7 @@ class StockPicking(models.Model):
             "route_progress_percent": route_progress_percent,
             "weight_display": weight_display,
             "company_phone": company_phone,
+            "company_wa_phone": wa_digits,
             "company_email": company_email,
             "is_public": False,
             "carrier_num": carrier_num,

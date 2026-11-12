@@ -13,7 +13,7 @@ def migrate(cr, version):
     try:
         Carrier = env["delivery.carrier"].with_context(active_test=False)
         canonical = env.ref(
-            "stock_picking_delivery_tracking.delivery_carrier_jntcargo",
+            "stock_picking_delivery_tracking.carrier_jntcargo",
             raise_if_not_found=False,
         )
         all_jnt = Carrier.search(

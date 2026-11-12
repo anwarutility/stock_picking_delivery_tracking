@@ -1,5 +1,21 @@
 // Delivery Tracking - backend link-copy cosmetics (stock.picking form).
 
+// Custom copy widget (works on plain HTTP, unlike CopyClipboardURL).
+.o_dtd_copy_url {
+    width: 100%;
+    gap: 0.5rem;
+
+    .o_dtd_copy_url_input {
+        font-family: monospace;
+        font-size: 12px;
+        min-width: 240px;
+    }
+
+    .o_dtd_copy_url_button {
+        white-space: nowrap;
+    }
+}
+
 .o_dtd_backend_url {
     min-width: 320px;
 

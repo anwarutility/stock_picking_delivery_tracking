@@ -17,7 +17,7 @@ class DeliveryCarrier(models.Model):
     def _ensure_jnt_cargo_carrier(self):
         """Ensure J&T Cargo carrier exists and is mapped to biteship_courier_code='jntcargo'."""
         carrier = self.env.ref(
-            "stock_picking_delivery_tracking.delivery_carrier_jntcargo",
+            "stock_picking_delivery_tracking.carrier_jntcargo",
             raise_if_not_found=False,
         )
         if not carrier or not carrier.exists():

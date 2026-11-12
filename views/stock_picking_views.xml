@@ -23,7 +23,7 @@
             <!-- After Tracking 1: Link Public 1, then Carrier 2, Tracking Ref 2, Link Public 2 -->
             <xpath expr="//div[@name='tracking']" position="after">
                 <field name="delivery_tracking_url" string="Link Tracking Publik 1"
-                       class="o_dtd_backend_url" readonly="1" widget="CopyClipboardURL"
+                       class="o_dtd_backend_url" readonly="1" widget="delivery_tracking_copy_url"
                        attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"/>
 
                 <field name="carrier_id_2" string="Carrier 2"
@@ -35,7 +35,7 @@
                     <field name="carrier_tracking_ref_2" class="oe_inline text-break"/>
                 </div>
                 <field name="delivery_tracking_url_2" string="Link Tracking Publik 2"
-                       class="o_dtd_backend_url" readonly="1" widget="CopyClipboardURL"
+                       class="o_dtd_backend_url" readonly="1" widget="delivery_tracking_copy_url"
                        attrs="{'invisible': [('picking_type_code', '!=', 'outgoing')]}"/>
             </xpath>
 

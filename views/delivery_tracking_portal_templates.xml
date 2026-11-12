@@ -20,7 +20,7 @@
          ========================================================= -->
     <template id="portal_tracking_page" name="Delivery Order Tracking Page">
         <t t-call="portal.portal_layout">
-            <div t-attf-class="o_dtd_page {{is_public and 'o_dtd_public_view' or ''}}" id="dtd_root">
+            <div t-attf-class="o_dtd_page {{is_public and 'o_dtd_public_view' or ''}}" id="dtd_root" t-att-data-company="origin_info['name']">
 
                 <!-- TOP GLASSMORPHISM BAR: TRUST BADGE & VIEW MODE SWITCHER -->
                 <header class="o_dtd_top_bar" role="banner">
@@ -340,14 +340,14 @@
                                         </div>
                                     </div>
                                     <div>
-                                        <a t-if="company_phone"
-                                           t-attf-href="https://wa.me/{{company_phone.replace(' ', '').replace('-', '').replace('+', '').replace('(', '').replace(')', '')}}?text=Halo%20Admin%20Aston%20Graphindo,%20saya%20ingin%20bertanya%20mengenai%20status%20paket%20nomor%20{{resi or picking_name}}"
+                                        <a t-if="company_wa_phone or company_phone"
+                                           t-attf-href="https://wa.me/{{company_wa_phone or company_phone.replace(' ', '').replace('-', '').replace('+', '').replace('(', '').replace(')', '')}}?text=Halo%20Admin%20{{(origin_info['name'] or 'CS').replace(' ', '%20')}},%20saya%20ingin%20bertanya%20mengenai%20status%20paket%20nomor%20{{resi or picking_name}}"
                                            target="_blank" rel="noopener noreferrer"
                                            class="btn btn-sm btn-success rounded-pill px-3 py-2 fw-bold d-inline-flex align-items-center gap-2">
                                             <i class="fa fa-whatsapp fs-6" aria-hidden="true"/>
                                             <span>Hubungi CS WhatsApp</span>
                                         </a>
-                                        <a t-else="" href="mailto:support@astongraphindo.com"
+                                        <a t-elif="company_email" t-attf-href="mailto:{{company_email}}"
                                            class="btn btn-sm btn-primary rounded-pill px-3 py-2 fw-bold d-inline-flex align-items-center gap-2">
                                             <i class="fa fa-envelope-o" aria-hidden="true"/>
                                             <span>Kirim Email CS</span>
@@ -473,12 +473,18 @@
                             <i class="fa fa-copy" aria-hidden="true"/>
                             <span class="copy-lbl">Salin Resi</span>
                         </button>
-                        <a t-if="company_phone"
-                           t-attf-href="https://wa.me/{{company_phone.replace(' ', '').replace('-', '').replace('+', '').replace('(', '').replace(')', '')}}?text=Halo%20Admin%20Aston%20Graphindo,%20saya%20ingin%20tanya%20paket%20{{resi or picking_name}}"
+                        <a t-if="company_wa_phone or company_phone"
+                           t-attf-href="https://wa.me/{{company_wa_phone or company_phone.replace(' ', '').replace('-', '').replace('+', '').replace('(', '').replace(')', '')}}?text=Halo%20Admin%20{{(origin_info['name'] or 'CS').replace(' ', '%20')}},%20saya%20ingin%20tanya%20paket%20{{resi or picking_name}}"
                            target="_blank" rel="noopener noreferrer"
                            class="o_dtd_bar_btn o_btn_wa_bar">
                             <i class="fa fa-whatsapp" aria-hidden="true"/>
                             <span>Bantuan CS</span>
+                        </a>
+                        <a t-elif="company_email"
+                           t-attf-href="mailto:{{company_email}}"
+                           class="o_dtd_bar_btn o_btn_wa_bar">
+                            <i class="fa fa-envelope-o" aria-hidden="true"/>
+                            <span>Email CS</span>
                         </a>
                     </div>
                 </nav>
@@ -579,9 +585,11 @@
 
                 function dtdShareWhatsApp() {
                     var resiEl = document.getElementById('dtd_resi_text');
+                    var rootEl = document.getElementById('dtd_root');
                     var resi = (resiEl ? resiEl.innerText.trim() : '');
+                    var companyName = (rootEl &amp;&amp; rootEl.getAttribute('data-company')) || 'Pengirim';
                     var url = window.location.href;
-                    var text = 'Lacak status pengiriman paket ' + (resi &amp;&amp; resi !== 'Belum tersedia' ? 'No. Resi: ' + resi : '') + ' dari PT Aston Graphindo Indonesia melalui tautan resmi berikut: ' + url;
+                    var text = 'Lacak status pengiriman paket ' + (resi &amp;&amp; resi !== 'Belum tersedia' ? 'No. Resi: ' + resi : '') + ' dari ' + companyName + ' melalui tautan resmi berikut: ' + url;
                     var waUrl = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(text);
                     window.open(waUrl, '_blank');
                 }

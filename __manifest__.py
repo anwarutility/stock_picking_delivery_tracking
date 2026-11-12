@@ -3,7 +3,7 @@
 
 {
     "name": "Stock Picking Delivery Tracking",
-    "version": "16.0.1.11.0",
+    "version": "16.0.1.12.0",
     "summary": "Delivery status tracking via logistics API (Dual Carrier Support)",
     "category": "Inventory",
     "author": "PT Aston Graphindo Indonesia",
@@ -28,8 +28,13 @@
         "web.assets_backend": [
             "/stock_picking_delivery_tracking/static/src/scss"
             "/delivery_tracking_backend.scss",
+            "/stock_picking_delivery_tracking/static/src/js"
+            "/copy_tracking_url_field.js",
+            "/stock_picking_delivery_tracking/static/src/xml"
+            "/copy_tracking_url_field.xml",
         ],
     },
+    "post_init_hook": "post_init_hook",
     "demo": [],
     "installable": True,
     "auto_install": False,
