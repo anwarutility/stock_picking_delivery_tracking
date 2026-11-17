@@ -32,7 +32,7 @@ TRACKING_STATUS_SELECTION = [
 ]
 
 # Statuses considered "final": the cron will stop polling pickings in these.
-FINAL_TRACKING_STATUSES = ["delivered", "exception"]
+FINAL_TRACKING_STATUSES = ["delivered", "exception", "shipped"]
 
 # Milestones shown on the customer-facing tracking portal. Derived from the
 # internal status + Biteship history (see ``_get_delivery_tracking_steps``).
