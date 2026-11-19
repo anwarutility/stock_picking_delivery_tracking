@@ -175,6 +175,16 @@ class TrackingAPIClient:
                     raw_response=response.text,
                     error_code="http_5xx",
                 )
+            if response.status_code == 402:
+                _logger.error(
+                    "Biteship get_status balance depleted HTTP 402: %s",
+                    response.text[:500],
+                )
+                return self._error_result(
+                    "Biteship balance depleted (HTTP 402). Silakan top-up saldo.",
+                    raw_response=response.text,
+                    error_code="insufficient_balance",
+                )
             if response.status_code in (401, 403):
                 _logger.error(
                     "Biteship get_status authentication failed HTTP %s for %s",

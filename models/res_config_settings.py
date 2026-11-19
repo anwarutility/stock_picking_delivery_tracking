@@ -9,12 +9,12 @@ class ResConfigSettings(models.TransientModel):
 
     delivery_tracking_cron_interval_minutes = fields.Integer(
         string="Delivery Tracking Poll Interval (minutes)",
-        default=30,
+        default=1440,
         config_parameter="delivery_tracking_cron_interval_minutes",
     )
     delivery_tracking_cron_batch_size = fields.Integer(
         string="Delivery Tracking Batch Size per Run",
-        default=50,
+        default=10,
         config_parameter="delivery_tracking_cron_batch_size",
     )
     biteship_api_key = fields.Char(
@@ -69,7 +69,7 @@ class ResConfigSettings(models.TransientModel):
                 raise_if_not_found=False,
             )
             if cron:
-                cron.write(
+                cron.sudo().write(
                     {
                         "interval_number": self.delivery_tracking_cron_interval_minutes,
                         "interval_type": "minutes",

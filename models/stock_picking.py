@@ -95,6 +95,11 @@ class StockPicking(models.Model):
         help="Stable Biteship tracking object id returned by the status API. "
         "Used to build the public tracking link shown in Telegram messages.",
     )
+    delivery_tracking_retry_count = fields.Integer(
+        string="Tracking Retry Count Kurir 1",
+        default=0,
+        copy=False,
+    )
 
     # =========================================================================
     # CARRIER 2 TRACKING FIELDS
@@ -137,6 +142,11 @@ class StockPicking(models.Model):
         string="Public Tracking URL 2",
         compute="_compute_delivery_tracking_url_2",
         help="Public no-login URL that lets the customer follow the shipment of Carrier 2.",
+    )
+    delivery_tracking_retry_count_2 = fields.Integer(
+        string="Tracking Retry Count Kurir 2",
+        default=0,
+        copy=False,
     )
 
     # =========================================================================
@@ -802,6 +812,27 @@ class StockPicking(models.Model):
         biteship_id = raw.get("id") if isinstance(raw, dict) else False
 
         carrier = self.carrier_id if carrier_num == 1 else self.carrier_id_2
+        current_retry = (
+            self.delivery_tracking_retry_count
+            if carrier_num == 1
+            else self.delivery_tracking_retry_count_2
+        )
+        if status == "unknown":
+            new_retry = current_retry + 1
+            err_str = str(error_message or "").lower()
+            is_permanent_error = (
+                "400" in err_str
+                or "invalid" in err_str
+                or "expired" in err_str
+                or "not found" in err_str
+            )
+            if new_retry >= 3 or is_permanent_error:
+                status = "exception"
+                status_desc = _("Kendala tracking: %s") % (
+                    error_message or _("Resi tidak valid atau kadaluarsa")
+                )
+        else:
+            new_retry = 0
 
         if carrier_num == 1:
             vals = {
@@ -809,6 +840,7 @@ class StockPicking(models.Model):
                 "delivery_tracking_status": status,
                 "delivery_tracking_status_desc": status_desc,
                 "delivery_tracking_error": error_message,
+                "delivery_tracking_retry_count": new_retry,
             }
             if estimated_date:
                 vals["delivery_estimated_date"] = estimated_date
@@ -820,6 +852,7 @@ class StockPicking(models.Model):
                 "delivery_tracking_status_2": status,
                 "delivery_tracking_status_desc_2": status_desc,
                 "delivery_tracking_error_2": error_message,
+                "delivery_tracking_retry_count_2": new_retry,
             }
             if estimated_date:
                 vals["delivery_estimated_date_2"] = estimated_date
@@ -850,12 +883,32 @@ class StockPicking(models.Model):
             )
             existing_dates.add(event_datetime)
 
-    def _track_single(self, provider=None):
+    def _is_dev_environment_with_live_key(self, provider):
+        """Safety guard: prevent using live Biteship key on dev/staging/localhost."""
+        if not provider or not getattr(provider, "api_key", "").startswith("biteship_live."):
+            return False
+        icp = self.env["ir.config_parameter"].sudo()
+        if icp.get_param("delivery_tracking.allow_live_on_dev", "False").lower() in ("true", "1"):
+            return False
+        base_url = icp.get_param("web.base.url", "").lower()
+        dev_indicators = ["localhost", "127.0.0.1", "test", "staging", ".local"]
+        return any(ind in base_url for ind in dev_indicators)
+
+    def _track_single(self, provider=None, force=False):
         """Fetch and process tracking status for Carrier 1 and Carrier 2."""
         self.ensure_one()
         if not provider:
             provider = self._get_active_tracking_provider()
-        if not provider:
+        if not provider or not provider.active or not provider.api_key:
+            return False
+
+        if self._is_dev_environment_with_live_key(provider):
+            _logger.warning(
+                "Delivery tracking: API live Biteship dicegah berjalan di environment non-produksi "
+                "(web.base.url: %s). Gunakan sandbox key 'biteship_test...' atau set config parameter "
+                "'delivery_tracking.allow_live_on_dev=True' jika memang disengaja.",
+                self.env["ir.config_parameter"].sudo().get_param("web.base.url", ""),
+            )
             return False
 
         client = TrackingAPIClient(provider)
@@ -863,11 +916,14 @@ class StockPicking(models.Model):
 
         # Carrier 1 tracking
         if self.carrier_tracking_ref and self.carrier_id.biteship_courier_code:
-            res1 = client.get_status(
-                self.carrier_tracking_ref, self.carrier_id.biteship_courier_code
-            )
-            self._process_tracking_result(res1, carrier_num=1)
-            refreshed = True
+            if force or self.delivery_tracking_status not in FINAL_TRACKING_STATUSES:
+                res1 = client.get_status(
+                    self.carrier_tracking_ref, self.carrier_id.biteship_courier_code
+                )
+                self._process_tracking_result(res1, carrier_num=1)
+                refreshed = True
+                if res1.get("error_code") == "insufficient_balance":
+                    return "insufficient_balance"
         elif self.carrier_tracking_ref:
             _logger.warning(
                 "Delivery tracking: carrier 1 '%s' on %s is not mapped to Biteship.",
@@ -877,11 +933,14 @@ class StockPicking(models.Model):
 
         # Carrier 2 tracking
         if self.carrier_tracking_ref_2 and self.carrier_id_2.biteship_courier_code:
-            res2 = client.get_status(
-                self.carrier_tracking_ref_2, self.carrier_id_2.biteship_courier_code
-            )
-            self._process_tracking_result(res2, carrier_num=2)
-            refreshed = True
+            if force or self.delivery_tracking_status_2 not in FINAL_TRACKING_STATUSES:
+                res2 = client.get_status(
+                    self.carrier_tracking_ref_2, self.carrier_id_2.biteship_courier_code
+                )
+                self._process_tracking_result(res2, carrier_num=2)
+                refreshed = True
+                if res2.get("error_code") == "insufficient_balance":
+                    return "insufficient_balance"
         elif self.carrier_tracking_ref_2:
             _logger.warning(
                 "Delivery tracking: carrier 2 '%s' on %s is not mapped to Biteship.",
@@ -894,23 +953,29 @@ class StockPicking(models.Model):
     def cron_check_delivery_status(self):
         """Poll tracking status for eligible outgoing done pickings."""
         provider = self._get_active_tracking_provider()
-        if not provider:
+        if not provider or not provider.active or not provider.api_key:
+            return False
+        if self._is_dev_environment_with_live_key(provider):
+            _logger.warning(
+                "Delivery tracking cron: live Biteship call blocked on non-production environment."
+            )
             return False
         icp = self.env["ir.config_parameter"]
         batch_size = int(
             icp.get_param(
                 "delivery_tracking_cron_batch_size",
-                default=50,
+                default=10,
             )
         )
         domain = [
             ("picking_type_code", "=", "outgoing"),
             ("state", "=", "done"),
             "|",
+            "&",
             ("carrier_tracking_ref", "!=", False),
-            ("carrier_tracking_ref_2", "!=", False),
-            "|",
             ("delivery_tracking_status", "not in", FINAL_TRACKING_STATUSES),
+            "&",
+            ("carrier_tracking_ref_2", "!=", False),
             ("delivery_tracking_status_2", "not in", FINAL_TRACKING_STATUSES),
         ]
         pickings = self.search(domain)
@@ -919,7 +984,12 @@ class StockPicking(models.Model):
             reverse=False,
         )[:batch_size]
         for picking in pickings:
-            picking._track_single(provider)
+            res = picking._track_single(provider, force=False)
+            if res == "insufficient_balance":
+                _logger.warning(
+                    "Delivery tracking cron aborted: Biteship balance depleted."
+                )
+                break
         return True
 
     def action_check_delivery_status(self):
@@ -953,7 +1023,7 @@ class StockPicking(models.Model):
         refreshed = 0
         skipped = 0
         for picking in self:
-            if picking._track_single():
+            if picking._track_single(force=True):
                 refreshed += 1
             else:
                 skipped += 1
@@ -1014,6 +1084,7 @@ class StockPicking(models.Model):
                             "delivery_tracking_status_desc": False,
                             "delivery_tracking_error": False,
                             "delivery_last_check": False,
+                            "delivery_tracking_retry_count": 0,
                             "delivery_tracking_token": uuid.uuid4().hex,
                         }
                     )
@@ -1027,6 +1098,7 @@ class StockPicking(models.Model):
                             "delivery_tracking_status_desc_2": False,
                             "delivery_tracking_error_2": False,
                             "delivery_last_check_2": False,
+                            "delivery_tracking_retry_count_2": 0,
                             "delivery_tracking_token_2": uuid.uuid4().hex,
                         }
                     )
@@ -1207,7 +1279,7 @@ class StockPicking(models.Model):
         failed_reasons = []
         for picking in self:
             try:
-                if picking._track_single():
+                if picking._track_single(force=True):
                     refreshed += 1
                 else:
                     failed += 1
